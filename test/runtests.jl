@@ -22,6 +22,12 @@ struct Skw
 end
 @batteries Skw kwconstructor=true kwshow=true
 
+struct Empty1 end
+struct Empty2 end
+@batteries Empty1
+@batteries Empty2
+
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -53,5 +59,7 @@ end
     s = sprint(show, SBatteries(1,2))
     @test !occursin("=", s)
 
-
+    @test Empty1() !== Empty2()
+    @test Empty1() != Empty2()
+    @test hash(Empty1()) != hash(Empty2())
 end

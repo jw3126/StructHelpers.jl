@@ -7,8 +7,10 @@ import ConstructionBase: getproperties, constructorof, setproperties
 @inline function structural_eq(o1, o2)
     getproperties(o1) == getproperties(o2)
 end
-@inline function structural_hash(o, h::UInt64)::UInt64
-    nt = getproperties(o)
+
+@inline function structural_hash(o, h::UInt)::UInt
+    h = Base.hash(typeof(o), h)
+    nt = Tuple(getproperties(o))
     Base.hash(nt, h)
 end
 function kwshow(io::IO, o)
@@ -81,7 +83,7 @@ macro batteries(T, kw...)
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     if nt.hash
-        def = :(Base.hash(o::$T, h::UInt64) = $(structural_hash)(o,h))
+        def = :(Base.hash(o::$T, h::UInt) = $(structural_hash)(o,h))
         push!(ret.args, def)
     end
     if nt.eq
