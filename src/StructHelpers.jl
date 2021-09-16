@@ -34,10 +34,40 @@ function def_kwconstructor(T, propertynames)
 end
 
 const BATTERIES_DEFAULTS = (
-    eq=true, hash=true,
-    kwconstructor=false, kwshow=false,
-    getproperties=true, constructorof=true,
+    eq            = true ,
+    hash          = true ,
+    kwconstructor = false,
+    kwshow        = false,
+    getproperties = true ,
+    constructorof = true ,
 )
+
+const BATTERIES_DOCSTRINGS = (
+    eq            = "Define `Base.(==)` structurally.",
+    hash          = "Define `Base.hash` structurally.",
+    kwconstructor = "Add a keyword constructor.",
+    kwshow        = "Overload `Base.show` such that the names of each field are printed.",
+    getproperties = "Overload `ConstructionBase.getproperties`.",
+    constructorof = "Overload `ConstructionBase.constructorof`.",
+)
+
+if (keys(BATTERIES_DEFAULTS) != keys(BATTERIES_DOCSTRINGS))
+    error("""
+          keys(BATTERIES_DEFAULTS) == key(BATTERIES_DOCSTRINGS) must hold.
+          Got:
+          keys(BATTERIES_DEFAULTS) = $(keys(BATTERIES_DEFAULTS))
+          keys(BATTERIES_DOCSTRINGS) = $(keys(BATTERIES_DOCSTRINGS))
+    """)
+end
+@assert keys(BATTERIES_DEFAULTS) == keys(BATTERIES_DOCSTRINGS)
+
+function doc_batteries_options()
+    lines = map(propertynames(BATTERIES_DEFAULTS)) do key
+        "* **$key** = $(BATTERIES_DEFAULTS[key]):\n $(BATTERIES_DOCSTRINGS[key])"
+    end
+    join(lines, "\n")
+end
+
 
 const ALLOWED_KW = keys(BATTERIES_DEFAULTS)
 
@@ -46,8 +76,6 @@ const ALLOWED_KW = keys(BATTERIES_DEFAULTS)
     @batteries T [options]
 
 Automatically derive several methods for type `T`.
-Supported options are:
-$BATTERIES_DEFAULTS
 
 # Example
 ```julia
@@ -60,6 +88,10 @@ end
 @batteries S hash=false # don't overload `Base.hash`
 @batteries S kwconstructor=true # add a keyword constructor
 ```
+
+Supported options and defaults are:
+
+$(doc_batteries_options())
 """
 macro batteries(T, kw...)
     nt = parse_all_macro_kw(kw)

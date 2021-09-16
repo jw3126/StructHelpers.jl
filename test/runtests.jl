@@ -27,6 +27,7 @@ struct Empty2 end
 @batteries Empty1
 @batteries Empty2
 
+struct SErrors;a;b;c;end
 
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
@@ -63,7 +64,6 @@ struct Empty2 end
     @test Empty1() != Empty2()
     @test hash(Empty1()) != hash(Empty2())
 
-    struct SErrors;a;b;c;end
     @test_throws Exception @macroexpand @batteries SErrors kwconstructor="true"
     @test_throws Exception @macroexpand @batteries SErrors nonsense=true
     @macroexpand @batteries SErrors kwconstructor=true

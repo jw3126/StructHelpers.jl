@@ -20,6 +20,10 @@ end
 @batteries S hash=false # don't overload `Base.hash`
 @batteries S kwconstructor=true # add a keyword constructor
 ```
+For all supported options and defaults, consult the docstring:
+```julia
+julia>?@batteries
+```
 
 # Alternatives
 
