@@ -1,7 +1,7 @@
 name = "StructHelpers"
 uuid = "4093c41a-2008-41fd-82b8-e3f9d02b504f"
 authors = ["Jan Weidner <jw3126@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
