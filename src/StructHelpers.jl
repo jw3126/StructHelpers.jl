@@ -39,6 +39,8 @@ const BATTERIES_DEFAULTS = (
     getproperties=true, constructorof=true,
 )
 
+const ALLOWED_KW = keys(BATTERIES_DEFAULTS)
+
 """
 
     @batteries T [options]
@@ -61,13 +63,20 @@ end
 """
 macro batteries(T, kw...)
     nt = parse_all_macro_kw(kw)
-    for pname in propertynames(nt)
+    for (pname, val) in pairs(nt)
         if !(pname in propertynames(BATTERIES_DEFAULTS))
             error("""
                 Unsupported keyword.
                 Offending Keyword: $pname
                 allowed: $ALLOWED_KW
-                Got: $kw
+                Got: $nt
+            """)
+        end
+        if !(val isa Bool)
+            error("""
+                All options must be literally `true` or `false`.
+                Got: $nt
+                Offending Keyword: $pname
             """)
         end
     end
