@@ -8,8 +8,10 @@ import ConstructionBase: getproperties, constructorof, setproperties
     getproperties(o1) == getproperties(o2)
 end
 
-@inline function structural_hash(o, h::UInt)::UInt
-    h = Base.hash(typeof(o), h)
+start_hash(o, h, typesalt::Nothing) = Base.hash(typeof(o), h)
+start_hash(o, h, typesalt) = Base.hash(typesalt, h)
+@inline function structural_hash(o, h::UInt, typesalt=nothing)::UInt
+    h = start_hash(o, h, typesalt)
     nt = Tuple(getproperties(o))
     Base.hash(nt, h)
 end
@@ -40,6 +42,7 @@ const BATTERIES_DEFAULTS = (
     kwshow        = false,
     getproperties = true ,
     constructorof = true ,
+    typesalt      = nothing,
 )
 
 const BATTERIES_DOCSTRINGS = (
@@ -49,6 +52,7 @@ const BATTERIES_DOCSTRINGS = (
     kwshow        = "Overload `Base.show` such that the names of each field are printed.",
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
+    typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `getproperties(T)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
 )
 
 if (keys(BATTERIES_DEFAULTS) != keys(BATTERIES_DOCSTRINGS))
@@ -104,11 +108,20 @@ macro batteries(T, kw...)
                 Got: $nt
             """)
         end
-        if !(val isa Bool)
+        if val isa Bool
+
+        elseif pname == :typesalt
+            if !(val isa Union{Nothing,Integer})
+                error("""`typesalt` must be literally `nothing` or an unsigned integer. Got:
+                      typesalt = $(typesalt)::$(typeof(typesalt))
+                      """)
+            end
+        else
             error("""
-                All options must be literally `true` or `false`.
+                Bad keyword argument value:
                 Got: $nt
                 Offending Keyword: $pname
+                Offending value  : $val
             """)
         end
     end
@@ -124,7 +137,7 @@ macro batteries(T, kw...)
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     if nt.hash
-        def = :(Base.hash(o::$T, h::UInt) = $(structural_hash)(o,h))
+        def = :(Base.hash(o::$T, h::UInt) = $(structural_hash)(o,h, $(nt.typesalt)))
         push!(ret.args, def)
     end
     if nt.eq

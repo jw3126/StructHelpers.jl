@@ -27,6 +27,15 @@ struct Empty2 end
 @batteries Empty1
 @batteries Empty2
 
+struct Salt1 end
+struct Salt1b end
+struct Salt2 end
+@batteries Salt1 typesalt = 1
+@batteries Salt1b typesalt = 1
+@batteries Salt2 typesalt = 2
+struct NoSalt end
+@batteries NoSalt
+
 struct SErrors;a;b;c;end
 
 @testset "@batteries" begin
@@ -67,4 +76,8 @@ struct SErrors;a;b;c;end
     @test_throws Exception @macroexpand @batteries SErrors kwconstructor="true"
     @test_throws Exception @macroexpand @batteries SErrors nonsense=true
     @macroexpand @batteries SErrors kwconstructor=true
+
+    @test hash(Salt1()) === hash(Salt1b())
+    @test hash(Salt1()) != hash(NoSalt())
+    @test hash(Salt1()) != hash(Salt2())
 end
