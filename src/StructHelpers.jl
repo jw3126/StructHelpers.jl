@@ -113,7 +113,7 @@ macro batteries(T, kw...)
         elseif pname == :typesalt
             if !(val isa Union{Nothing,Integer})
                 error("""`typesalt` must be literally `nothing` or an unsigned integer. Got:
-                      typesalt = $(typesalt)::$(typeof(typesalt))
+                      typesalt = $(repr(typesalt))::$(typeof(typesalt))
                       """)
             end
         else
@@ -121,7 +121,7 @@ macro batteries(T, kw...)
                 Bad keyword argument value:
                 Got: $nt
                 Offending Keyword: $pname
-                Offending value  : $val
+                Offending value  : $(repr(val))
             """)
         end
     end
