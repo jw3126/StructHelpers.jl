@@ -28,3 +28,4 @@ julia>?@batteries
 # Alternatives
 
 * [AutoHashEquals](https://github.com/andrewcooke/AutoHashEquals.jl) requires annotating the struct definition. This can be inconvenient if you want to annotate the definition with another macro as well.
+* [StructEquality](https://github.com/jolin-io/StructEquality.jl) is similar to this package.
