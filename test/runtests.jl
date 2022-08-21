@@ -1,4 +1,4 @@
-using StructHelpers: @batteries, StructHelpers
+using StructHelpers: @batteries, StructHelpers, @enumbatteries
 const SH = StructHelpers
 using Test
 
@@ -80,4 +80,20 @@ struct SErrors;a;b;c;end
     @test hash(Salt1()) === hash(Salt1b())
     @test hash(Salt1()) != hash(NoSalt())
     @test hash(Salt1()) != hash(Salt2())
+end
+
+@enum Color Red Blue Green
+@enumbatteries Color string_conversion = true symbol_conversion = true
+
+@testset "@enumbatteries" begin
+    @test Red === @inferred Color("Red")
+    @test Red === @inferred convert(Color, "Red")
+    @test "Red" === @inferred String(Red)
+    @test "Red" === @inferred convert(String, Red)
+
+    @test :Red === @inferred Symbol(Red)
+    @test :Red === @inferred convert(Symbol, Red)
+    @test Red === @inferred Color(:Red)
+    @test Red === @inferred convert(Color, :Red)
+
 end
