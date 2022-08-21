@@ -1,6 +1,7 @@
 module StructHelpers
 
 export @batteries
+export @enumbatteries
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
@@ -72,8 +73,7 @@ function doc_batteries_options()
     join(lines, "\n")
 end
 
-
-const ALLOWED_KW = keys(BATTERIES_DEFAULTS)
+const BATTERIES_ALLOWED_KW = keys(BATTERIES_DEFAULTS)
 
 """
 
@@ -104,7 +104,7 @@ macro batteries(T, kw...)
             error("""
                 Unsupported keyword.
                 Offending Keyword: $pname
-                allowed: $ALLOWED_KW
+                allowed: $BATTERIES_ALLOWED_KW
                 Got: $nt
             """)
         end
@@ -193,4 +193,162 @@ function parse_all_macro_kw(kw)
     (;pairs...)
 end
 
+################################################################################
+#### enum
+################################################################################
+function ifelsechain(
+        cond_code_pairs,
+        rest
+    )
+    if length(cond_code_pairs) == 0
+        return rest
+    elseif length(cond_code_pairs) == 1
+        cond, code = only(cond_code_pairs)
+        Expr(:if, cond, code, rest)
+    else
+        cond, code = cond_code_pairs[end]
+        ifelsechain(
+            cond_code_pairs[begin:end-1],
+            Expr(:elseif, cond, code, rest),
+        )
+    end
 end
+
+function enum_from_string end
+function enum_from_symbol end
+function string_from_enum(x)::String
+    string(x)
+end
+function symbol_from_enum(x)::Symbol
+    Symbol(string_from_enum(x))
+end
+
+function def_enum_from_string(T)::Expr
+    body = def_symbol_or_enum_from_string_body(string_from_enum, T)
+    :(
+      function StructHelpers.enum_from_string(::Type{$T}, s::String)::$T
+          $body
+      end
+     )
+end
+function def_enum_from_symbol(T)::Expr
+    body = def_symbol_or_enum_from_string_body(QuoteNode∘symbol_from_enum, T)
+    :(
+      function StructHelpers.enum_from_symbol(::Type{$T}, s::Symbol)::$T
+          $body
+      end
+     )
+end
+
+@noinline function throw_no_matching_instance(f,T,s)
+    msg = """
+    Cannot instaniate enum `T` from `s`. Got:
+    s = $(repr(s))
+    T = $(T)
+    allowed values for s = $(map(f, instances(T)))
+    """
+    throw(ArgumentError(msg))
+end
+
+function def_symbol_or_enum_from_string_body(f,T)
+    err = :($throw_no_matching_instance($f,$T,s))
+    matcharms = [
+        :(s === $(f(inst))) => inst for inst in instances(T)
+    ]
+    ifelsechain(matcharms, err)
+end
+
+const ENUM_BATTERIES_DEFAULTS = (
+    string_conversion=false,
+    symbol_conversion=false,
+)
+
+const ENUM_BATTERIES_DOCSTRINGS = (
+    string_conversion="Add `convert(MyEnum, ::String)`, `MyEnum(::String)`, `convert(String, ::MyEnum)` and `String(::MyEnum)`",
+    symbol_conversion="Add `convert(MyEnum, ::Symbol)`, `MyEnum(::Symbol)`, `convert(Symbol, ::MyEnum)` and `Symbol(::MyEnum)`",
+)
+
+if (keys(ENUM_BATTERIES_DEFAULTS) != keys(ENUM_BATTERIES_DOCSTRINGS))
+    error("""
+          keys(ENUM_BATTERIES_DEFAULTS) == key(ENUM_BATTERIES_DOCSTRINGS) must hold.
+          Got:
+          keys(ENUM_BATTERIES_DEFAULTS) = $(keys(ENUM_BATTERIES_DEFAULTS))
+          keys(ENUM_BATTERIES_DOCSTRINGS) = $(keys(ENUM_BATTERIES_DOCSTRINGS))
+    """)
+end
+@assert keys(ENUM_BATTERIES_DEFAULTS) == keys(ENUM_BATTERIES_DOCSTRINGS)
+
+function doc_enum_batteries_options()
+    lines = map(propertynames(ENUM_BATTERIES_DEFAULTS)) do key
+        "* **$key** = $(ENUM_BATTERIES_DEFAULTS[key]):\n $(ENUM_BATTERIES_DOCSTRINGS[key])"
+    end
+    join(lines, "\n")
+end
+
+const ENUM_BATTERIES_ALLOWED_KW = keys(ENUM_BATTERIES_DEFAULTS)
+
+"""
+
+    @enumbatteries T [options]
+
+Automatically derive several methods for Enum type `T`.
+
+# Example
+```julia
+@enum Color Red Blue Yellow
+@enumbatteries Color
+@enumbatteries Color hash=false # don't overload `Base.hash`
+@enumbatteries Color symbol_conversion=true # allow convert(Color, :Blue), Color(:Blue), convert(Symbol, Blue), Symbol(Blue)
+```
+
+Supported options and defaults are:
+
+$(doc_enum_batteries_options())
+"""
+macro enumbatteries(T, kw...)
+    nt = parse_all_macro_kw(kw)
+    for (pname, val) in pairs(nt)
+        if !(pname in propertynames(ENUM_BATTERIES_DEFAULTS))
+            error("""
+                Unsupported keyword.
+                Offending Keyword: $pname
+                allowed: $ENUM_BATTERIES_ALLOWED_KW
+                Got: $nt
+            """)
+        end
+        if val isa Bool
+
+        else
+            error("""
+                Bad keyword argument value:
+                Got: $nt
+                Offending Keyword: $pname
+                Offending value  : $(repr(val))
+            """)
+        end
+    end
+    nt = merge(ENUM_BATTERIES_DEFAULTS, nt)
+    TT = Base.eval(__module__, T)::Type
+    ret = quote end
+
+    push!(ret.args, :(import StructHelpers))
+    push!(ret.args, def_enum_from_symbol(TT))
+    push!(ret.args, def_enum_from_string(TT))
+    if nt.string_conversion
+        ex1 = :(Base.convert(::Type{$TT}, s::AbstractString) = StructHelpers.enum_from_string($TT, String(s)))
+        ex2 = :($T(s::AbstractString) = StructHelpers.enum_from_string($TT, String(s)))
+        ex3 = :(Base.convert(::Type{String}, x::$T) = StructHelpers.string_from_enum(x))
+        ex4 = :(Base.String(x::$T) = StructHelpers.string_from_enum(x))
+        push!(ret.args, ex1, ex2, ex3, ex4)
+    end
+    if nt.symbol_conversion
+        ex1 = :(Base.convert(::Type{$T}, s::Symbol) = StructHelpers.enum_from_symbol($TT, Symbol(s)))
+        ex2 = :($T(s::Symbol) = StructHelpers.enum_from_symbol($TT, Symbol(s)))
+        ex3 = :(Base.convert(::Type{Symbol}, x::$T) = StructHelpers.symbol_from_enum(x))
+        ex4 = :(Base.Symbol(x::$T) = StructHelpers.symbol_from_enum(x))
+        push!(ret.args, ex1, ex2, ex3, ex4)
+    end
+    return esc(ret)
+end
+
+end #module

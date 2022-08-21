@@ -1,4 +1,4 @@
-using StructHelpers: @batteries, StructHelpers
+using StructHelpers: @batteries, StructHelpers, @enumbatteries
 const SH = StructHelpers
 using Test
 
@@ -80,4 +80,44 @@ struct SErrors;a;b;c;end
     @test hash(Salt1()) === hash(Salt1b())
     @test hash(Salt1()) != hash(NoSalt())
     @test hash(Salt1()) != hash(Salt2())
+end
+
+@enum Color Red Blue Green
+
+@enumbatteries Color string_conversion = true symbol_conversion = true
+
+@enum Shape Circle Square 
+@enumbatteries Shape symbol_conversion =true
+
+@testset "@enumbatteries" begin
+    @test Red === @inferred Color("Red")
+    @test Red === @inferred convert(Color, "Red")
+    @test "Red" === @inferred String(Red)
+    @test "Red" === @inferred convert(String, Red)
+    @test_throws ArgumentError Color("Nonsense")
+
+    @test :Red === @inferred Symbol(Red)
+    @test :Red === @inferred convert(Symbol, Red)
+    @test Red === @inferred Color(:Red)
+    @test Red === @inferred convert(Color, :Red)
+    @test_throws ArgumentError Color(:Nonsense)
+    res = @test_throws ArgumentError convert(Color, :nonsense)
+    @test occursin(":nonsense", res.value.msg)
+    @test occursin(":Red", res.value.msg)
+    @test occursin(":Blue", res.value.msg)
+    @test occursin(":Green", res.value.msg)
+
+    @test :Circle === @inferred Symbol(Circle)
+    @test :Circle === @inferred convert(Symbol, Circle)
+    @test Circle === @inferred Shape(:Circle)
+    @test Circle === @inferred convert(Shape, :Circle)
+    @test_throws ArgumentError Shape(:Nonsense)
+    res = @test_throws ArgumentError convert(Shape, :nonsense)
+    @test occursin(":Circle", res.value.msg)
+    @test occursin(":Square", res.value.msg)
+
+    @test_throws Exception String(Circle)
+    @test_throws Exception convert(String, Circle)
+    @test_throws Exception Shape("Circle")
+    @test_throws Exception convert(Shape, "Circle")
 end
