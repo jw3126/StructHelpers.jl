@@ -38,6 +38,11 @@ struct NoSalt end
 
 struct SErrors;a;b;c;end
 
+struct NoSelfCtor; a; end
+struct WithSelfCtor; a; end
+@batteries NoSelfCtor selfconstructor=false
+@batteries WithSelfCtor selfconstructor=true
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -80,11 +85,16 @@ struct SErrors;a;b;c;end
     @test hash(Salt1()) === hash(Salt1b())
     @test hash(Salt1()) != hash(NoSalt())
     @test hash(Salt1()) != hash(Salt2())
+
+    @test WithSelfCtor(WithSelfCtor(1)) === WithSelfCtor(1)
+    @test NoSelfCtor(NoSelfCtor(1)) != NoSelfCtor(1)
+    @test NoSelfCtor(NoSelfCtor(1)) isa NoSelfCtor
+    @test NoSelfCtor(NoSelfCtor(1)).a === NoSelfCtor(1)
 end
 
 @enum Color Red Blue Green
 
-@enumbatteries Color string_conversion = true symbol_conversion = true
+@enumbatteries Color string_conversion = true symbol_conversion = true selfconstructor = false
 
 @enum Shape Circle Square 
 @enumbatteries Shape symbol_conversion =true
@@ -95,6 +105,7 @@ end
     @test "Red" === @inferred String(Red)
     @test "Red" === @inferred convert(String, Red)
     @test_throws ArgumentError Color("Nonsense")
+    @test_throws MethodError Color(Red)
 
     @test :Red === @inferred Symbol(Red)
     @test :Red === @inferred convert(Symbol, Red)
@@ -111,6 +122,7 @@ end
     @test :Circle === @inferred convert(Symbol, Circle)
     @test Circle === @inferred Shape(:Circle)
     @test Circle === @inferred convert(Shape, :Circle)
+    @test Circle === @inferred Shape(Circle)
     @test_throws ArgumentError Shape(:Nonsense)
     res = @test_throws ArgumentError convert(Shape, :nonsense)
     @test occursin(":Circle", res.value.msg)
