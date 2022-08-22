@@ -224,17 +224,27 @@ function ifelsechain(
     end
 end
 
-function enum_from_string end
-function enum_from_symbol end
-function string_from_enum(x)::String
-    string(x)
+function enum_from_string(::Type{T}, s::AbstractString)::T where {T}
+    _enum_from_string(T,convert(String,s))
 end
-function symbol_from_enum(x)::Symbol
-    Symbol(string_from_enum(x))
+function enum_from_symbol(::Type{T}, s::Symbol)::T where {T}
+    _enum_from_symbol(T,s)
+end
+function string_from_enum(enum)::String
+    string(enum)
+end
+function symbol_from_enum(enum)::Symbol
+    Symbol(string_from_enum(enum))
+end
+@generated function _enum_from_string(::Type{T}, s::String)::T where {T}
+    enum_from_string_or_symbol_body(string_from_enum, T)
+end
+@generated function _enum_from_symbol(::Type{T}, s::Symbol)::T where {T}
+    enum_from_string_or_symbol_body(QuoteNode∘symbol_from_enum, T)
 end
 
 function def_enum_from_string(T)::Expr
-    body = def_symbol_or_enum_from_string_body(string_from_enum, T)
+    body = enum_from_string_or_symbol_body(string_from_enum, T)
     :(
       function StructHelpers.enum_from_string(::Type{$T}, s::String)::$T
           $body
@@ -242,7 +252,7 @@ function def_enum_from_string(T)::Expr
      )
 end
 function def_enum_from_symbol(T)::Expr
-    body = def_symbol_or_enum_from_string_body(QuoteNode∘symbol_from_enum, T)
+    body = enum_from_string_or_symbol_body(QuoteNode∘symbol_from_enum, T)
     :(
       function StructHelpers.enum_from_symbol(::Type{$T}, s::Symbol)::$T
           $body
@@ -260,7 +270,7 @@ end
     throw(ArgumentError(msg))
 end
 
-function def_symbol_or_enum_from_string_body(f,T)
+function enum_from_string_or_symbol_body(f,T)
     err = :($throw_no_matching_instance($f,$T,s))
     matcharms = [
         :(s === $(f(inst))) => inst for inst in instances(T)

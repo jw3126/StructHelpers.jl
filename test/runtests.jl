@@ -133,3 +133,17 @@ end
     @test_throws Exception Shape("Circle")
     @test_throws Exception convert(Shape, "Circle")
 end
+
+@enum Alphabet a b c
+instances(Alphabet)
+@testset "enum conversion" begin
+    @test a === @inferred SH.enum_from_string(Alphabet, "a")
+    @test a === @inferred SH.enum_from_symbol(Alphabet, :a)
+
+    @test_throws ArgumentError SH.enum_from_string(Alphabet, "A")
+    @test_throws ArgumentError SH.enum_from_symbol(Alphabet, :A)
+
+    @test "b" === @inferred SH.string_from_enum(b)
+    @test :b === @inferred SH.symbol_from_enum(b)
+
+end
