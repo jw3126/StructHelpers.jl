@@ -30,6 +30,10 @@ function def_getproperties(T, propertynames)
     :(StructHelpers.getproperties(o::$T) = $body)
 end
 
+function def_selfconstructor(T)
+    :($T(self::$T) = self)
+end
+
 function def_kwconstructor(T, propertynames)
     call = Expr(:call, T, Expr(:parameters, propertynames...))
     ret = :($call = $T($(propertynames...)))
@@ -40,6 +44,7 @@ const BATTERIES_DEFAULTS = (
     eq            = true ,
     hash          = true ,
     kwconstructor = false,
+    selfconstructor = true,
     kwshow        = false,
     getproperties = true ,
     constructorof = true ,
@@ -50,6 +55,7 @@ const BATTERIES_DOCSTRINGS = (
     eq            = "Define `Base.(==)` structurally.",
     hash          = "Define `Base.hash` structurally.",
     kwconstructor = "Add a keyword constructor.",
+    selfconstructor = "Add a constructor of the for `T(self::T) = self`",
     kwshow        = "Overload `Base.show` such that the names of each field are printed.",
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
@@ -160,6 +166,10 @@ macro batteries(T, kw...)
         def = def_kwconstructor(T, fieldnames)
         push!(ret.args, def)
     end
+    if nt.selfconstructor
+        def = def_selfconstructor(T)
+        push!(ret.args, def)
+    end
     return esc(ret)
 end
 
@@ -261,11 +271,13 @@ end
 const ENUM_BATTERIES_DEFAULTS = (
     string_conversion=false,
     symbol_conversion=false,
+    selfconstructor=BATTERIES_DEFAULTS.selfconstructor,
 )
 
 const ENUM_BATTERIES_DOCSTRINGS = (
     string_conversion="Add `convert(MyEnum, ::String)`, `MyEnum(::String)`, `convert(String, ::MyEnum)` and `String(::MyEnum)`",
     symbol_conversion="Add `convert(MyEnum, ::Symbol)`, `MyEnum(::Symbol)`, `convert(Symbol, ::MyEnum)` and `Symbol(::MyEnum)`",
+    selfconstructor=BATTERIES_DOCSTRINGS.selfconstructor,
 )
 
 if (keys(ENUM_BATTERIES_DEFAULTS) != keys(ENUM_BATTERIES_DOCSTRINGS))
@@ -347,6 +359,10 @@ macro enumbatteries(T, kw...)
         ex3 = :(Base.convert(::Type{Symbol}, x::$T) = StructHelpers.symbol_from_enum(x))
         ex4 = :(Base.Symbol(x::$T) = StructHelpers.symbol_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
+    end
+    if nt.selfconstructor
+        def = def_selfconstructor(T)
+        push!(ret.args, def)
     end
     return esc(ret)
 end
