@@ -8,6 +8,9 @@ import ConstructionBase: getproperties, constructorof, setproperties
 @inline function structural_eq(o1, o2)
     getproperties(o1) == getproperties(o2)
 end
+@inline function structural_isequal(o1, o2)
+    isequal(getproperties(o1), getproperties(o2))
+end
 
 start_hash(o, h, typesalt::Nothing) = Base.hash(typeof(o), h)
 start_hash(o, h, typesalt) = Base.hash(typesalt, h)
@@ -41,7 +44,8 @@ function def_kwconstructor(T, propertynames)
 end
 
 const BATTERIES_DEFAULTS = (
-    eq            = true ,
+    eq            = true,
+    isequal       = true,
     hash          = true ,
     kwconstructor = false,
     selfconstructor = true,
@@ -53,6 +57,7 @@ const BATTERIES_DEFAULTS = (
 
 const BATTERIES_DOCSTRINGS = (
     eq            = "Define `Base.(==)` structurally.",
+    isequal       = "Define `Base.isequal` structurally.",
     hash          = "Define `Base.hash` structurally.",
     kwconstructor = "Add a keyword constructor.",
     selfconstructor = "Add a constructor of the for `T(self::T) = self`",
@@ -148,6 +153,10 @@ macro batteries(T, kw...)
     end
     if nt.eq
         def = :(Base.:(==)(o1::$T, o2::$T) = $(structural_eq)(o1, o2))
+        push!(ret.args, def)
+    end
+    if nt.isequal
+        def = :(Base.isequal(o1::$T, o2::$T) = $(structural_isequal)(o1, o2))
         push!(ret.args, def)
     end
     if nt.kwshow
