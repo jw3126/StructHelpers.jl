@@ -43,6 +43,9 @@ struct WithSelfCtor; a; end
 @batteries NoSelfCtor selfconstructor=false
 @batteries WithSelfCtor selfconstructor=true
 
+struct SNoIsEqual; a; end
+@batteries SNoIsEqual isequal=false
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -50,6 +53,12 @@ struct WithSelfCtor; a; end
     @test SNoHash(1,[]) == SNoHash(1,[])
     @test SVanilla(1,[]) != SVanilla(1,[])
 
+    @test isequal(SBatteries(NaN, 1), SBatteries(NaN, 1))
+    @test !isequal(SBatteries(1, 1), SBatteries(NaN, 1))
+    @test !isequal(SBatteries(NaN, 1), SBatteries(NaN, 2))
+    @test SBatteries(NaN, 1) != SBatteries(NaN, 1)
+    @test !isequal(SNoIsEqual(NaN), SNoIsEqual(NaN))
+    @test isequal(SNoIsEqual(1), SNoIsEqual(1))
     @test SBatteries(2,1) != SBatteries(1,2)
     @test Skw(2,1) != Skw(1,2)
     @test SNoHash(2,1) != SNoHash(1,2)
