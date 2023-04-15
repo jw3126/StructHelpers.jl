@@ -122,7 +122,8 @@ macro batteries(T, kw...)
         if val isa Bool
 
         elseif pname == :typesalt
-            if !(val isa Union{Nothing,Integer})
+            typesalt = val
+            if !(typesalt isa Union{Nothing,Integer})
                 error("""`typesalt` must be literally `nothing` or an unsigned integer. Got:
                       typesalt = $(repr(typesalt))::$(typeof(typesalt))
                       """)
