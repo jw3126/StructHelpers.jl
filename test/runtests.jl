@@ -142,3 +142,12 @@ end
     @test_throws Exception Shape("Circle")
     @test_throws Exception convert(Shape, "Circle")
 end
+
+struct Bad end
+@testset "Error messages" begin
+    @macroexpand @batteries Bad
+    @macroexpand @batteries Bad typesalt = 0xb6a4b9eeeb03b58b
+    @test_throws "`typesalt` must be literally `nothing` or an unsigned integer." @macroexpand @batteries Bad typesalt = "ouch"
+    @test_throws "Unsupported keyword." @macroexpand @batteries Bad does_not_exist = true   
+    @test_throws "Bad keyword argument value" @macroexpand @batteries Bad hash=:nonsense
+end
