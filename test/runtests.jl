@@ -169,19 +169,50 @@ struct Bad end
     end
 end
 
-struct HashEqAs
+abstract type AbstractHashEqAs end
+function SH.hash_eq_as(x::AbstractHashEqAs)
+    return x.hash_eq_as(x.payload)
+end
+
+struct HashEqAs <: AbstractHashEqAs
     hash_eq_as
     payload
 end
 SH.@batteries HashEqAs 
-function SH.hash_eq_as(x::HashEqAs)
-    return x.hash_eq_as(x.payload)
+struct HashEqAsTS1 <: AbstractHashEqAs
+    hash_eq_as
+    payload
 end
+SH.@batteries HashEqAsTS1 typesalt = 1
 
+struct HashEqAsTS1b <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAsTS1b typesalt = 1
+
+struct HashEqAsTS2 <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAsTS2 typesalt = 2
 
 @testset "hash_eq_as" begin
     @test HashEqAs(identity, 1) != HashEqAs(identity, -1)
     @test HashEqAs(abs, 1) == HashEqAs(abs, -1)
     @test isequal(HashEqAs(identity, 1), HashEqAs(x->x, 1))
 
+    @test hash(HashEqAs(identity, 1)) != hash(HashEqAs(identity, -1))
+    @test hash(HashEqAs(abs, 1)) === hash(HashEqAs(abs, -1))
+    @test hash(HashEqAs(identity, 1)) === hash(HashEqAs(x->x, 1))
+
+    @test hash(HashEqAsTS1(identity, 1)) != hash(HashEqAsTS1(identity, -1))
+    @test hash(HashEqAsTS1(abs, 1)) == hash(HashEqAsTS1(abs, -1))
+    @test hash(HashEqAsTS1b(abs, 1)) == hash(HashEqAsTS1(abs, -1))
+    @test hash(HashEqAsTS2(abs, 1)) != hash(HashEqAsTS1(abs, -1))
+
+    @test hash(HashEqAsTS1(x->2x::Int, 1)) === hash(HashEqAsTS1(identity, 2))
+    @test hash(HashEqAsTS2(x->2x::Int, 1)) != hash(HashEqAsTS1(identity, 2))
+    @test hash(HashEqAsTS1(identity, 1)) === 0x486b072c90d60e64
+    @test hash(HashEqAsTS2(x->5x, 1)) === 0xa4360acf486c15a4
 end

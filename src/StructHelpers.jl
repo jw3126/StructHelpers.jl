@@ -23,7 +23,12 @@ Overloading `hash_eq_as` is useful if you want for instance to skip certain fiel
 of `obj` or handle them in a special way.
 """
 function hash_eq_as(obj)
-    return obj
+    # it would be better to just use getproperties
+    # but this would cause hashed to change, which we want to 
+    # keep backwards compatible for now.
+    #
+    # TODO: Change to getproperties once we want to make a hash breaking change
+    Tuple(getproperties(obj))
 end
 
 @inline function structural_eq(o1, o2)
@@ -90,7 +95,7 @@ const BATTERIES_DOCSTRINGS = (
     kwshow        = "Overload `Base.show` such that the names of each field are printed.",
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
-    typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `getproperties(T)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
+    typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `hash_eq_as(obj)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
 )
 
 if (keys(BATTERIES_DEFAULTS) != keys(BATTERIES_DOCSTRINGS))
@@ -178,26 +183,23 @@ macro batteries(T, kw...)
     end
     if nt.hash
         def = :(function Base.hash(o::$T, h::UInt) 
-            proxy = $(hash_eq_as)(o)
-            $(structural_hash)(proxy,h, $(nt.typesalt))
+            h = ($start_hash)(o, h, $(nt.typesalt))
+            proxy = ($hash_eq_as)(o)
+            Base.hash(proxy, h)
         end
         )
         push!(ret.args, def)
     end
     if nt.eq
         def = :(function Base.:(==)(o1::$T, o2::$T)
-            proxy1 = $(hash_eq_as)(o1)
-            proxy2 = $(hash_eq_as)(o2)
-            $(structural_eq)(proxy1, proxy2)
+            ($hash_eq_as)(o1) == ($hash_eq_as)(o2)
         end
         )
         push!(ret.args, def)
     end
     if nt.isequal
         def = :(function Base.isequal(o1::$T, o2::$T) 
-            proxy1 = $(hash_eq_as)(o1)
-            proxy2 = $(hash_eq_as)(o2)
-            $(structural_isequal)(proxy1, proxy2)
+            isequal($hash_eq_as(o1), $hash_eq_as(o2))
         end
         )
         push!(ret.args, def)
