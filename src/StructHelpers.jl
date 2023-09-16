@@ -5,6 +5,27 @@ export @enumbatteries
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
+"""
+    hash_eq_as(obj)
+
+This allows to fine tune the behavior or `hash`, `==` and `isequal`
+for structs decorated by [`@batteries`](@ref).
+For instances the generated `isequal` method looks like this:
+```julia
+
+function Base.isequal(o1::T, o2::T)
+    proxy1 = StructHelpers.hash_eq_as(o1)
+    proxy2 = StructHelpers.hash_eq_as(o2)
+    StructHelper.structural_eq(proxy1, proxy2)
+end
+```
+Overloading `hash_eq_as` is useful if you want for instance to skip certain fields
+of `obj` or handle them in a special way.
+"""
+function hash_eq_as(obj)
+    return obj
+end
+
 @inline function structural_eq(o1, o2)
     getproperties(o1) == getproperties(o2)
 end
@@ -12,8 +33,13 @@ end
     isequal(getproperties(o1), getproperties(o2))
 end
 
-start_hash(o, h, typesalt::Nothing) = Base.hash(typeof(o), h)
-start_hash(o, h, typesalt) = Base.hash(typesalt, h)
+function start_hash(o, h, typesalt::Nothing) 
+    Base.hash(typeof(o), h)
+end
+function start_hash(o, h, typesalt) 
+    Base.hash(typesalt, h)
+end
+
 @inline function structural_hash(o, h::UInt, typesalt=nothing)::UInt
     h = start_hash(o, h, typesalt)
     nt = Tuple(getproperties(o))
@@ -107,6 +133,8 @@ end
 Supported options and defaults are:
 
 $(doc_batteries_options())
+
+See also [`hash_eq_as`](@ref)
 """
 macro batteries(T, kw...)
     nt = parse_all_macro_kw(kw)
@@ -149,15 +177,29 @@ macro batteries(T, kw...)
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     if nt.hash
-        def = :(Base.hash(o::$T, h::UInt) = $(structural_hash)(o,h, $(nt.typesalt)))
+        def = :(function Base.hash(o::$T, h::UInt) 
+            proxy = $(hash_eq_as)(o)
+            $(structural_hash)(proxy,h, $(nt.typesalt))
+        end
+        )
         push!(ret.args, def)
     end
     if nt.eq
-        def = :(Base.:(==)(o1::$T, o2::$T) = $(structural_eq)(o1, o2))
+        def = :(function Base.:(==)(o1::$T, o2::$T)
+            proxy1 = $(hash_eq_as)(o1)
+            proxy2 = $(hash_eq_as)(o2)
+            $(structural_eq)(proxy1, proxy2)
+        end
+        )
         push!(ret.args, def)
     end
     if nt.isequal
-        def = :(Base.isequal(o1::$T, o2::$T) = $(structural_isequal)(o1, o2))
+        def = :(function Base.isequal(o1::$T, o2::$T) 
+            proxy1 = $(hash_eq_as)(o1)
+            proxy2 = $(hash_eq_as)(o2)
+            $(structural_isequal)(proxy1, proxy2)
+        end
+        )
         push!(ret.args, def)
     end
     if nt.kwshow

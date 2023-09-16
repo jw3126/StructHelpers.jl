@@ -153,3 +153,20 @@ struct Bad end
         @test_throws "Bad keyword argument value" @macroexpand @batteries Bad hash=:nonsense
     end
 end
+
+struct HashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAs 
+function SH.hash_eq_as(x::HashEqAs)
+    return x.hash_eq_as(x.payload)
+end
+
+
+@testset "hash_eq_as" begin
+    @test HashEqAs(identity, 1) != HashEqAs(identity, -1)
+    @test HashEqAs(abs, 1) == HashEqAs(abs, -1)
+    @test isequal(HashEqAs(identity, 1), HashEqAs(x->x, 1))
+
+end
