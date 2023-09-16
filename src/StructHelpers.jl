@@ -8,18 +8,16 @@ import ConstructionBase: getproperties, constructorof, setproperties
 """
     hash_eq_as(obj)
 
-This allows to fine tune the behavior or `hash`, `==` and `isequal`
-for structs decorated by [`@batteries`](@ref).
+This allows to fine tune the behavior or `hash`, `==` and `isequal` for structs decorated by [`@batteries`](@ref).
 For instances the generated `isequal` method looks like this:
 ```julia
-
 function Base.isequal(o1::T, o2::T)
     proxy1 = StructHelpers.hash_eq_as(o1)
     proxy2 = StructHelpers.hash_eq_as(o2)
-    StructHelper.structural_eq(proxy1, proxy2)
+    isequal(proxy1, proxy2)
 end
 ```
-Overloading `hash_eq_as` is useful if you want for instance to skip certain fields
+Overloading `hash_eq_as` is useful for instance if you want to skip certain fields
 of `obj` or handle them in a special way.
 """
 function hash_eq_as(obj)
