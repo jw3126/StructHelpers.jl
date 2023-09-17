@@ -36,6 +36,9 @@ struct Salt2 end
 struct NoSalt end
 @batteries NoSalt
 
+struct SaltABC; a;b;c end
+@batteries SaltABC typesalt = 1
+
 struct SErrors;a;b;c;end
 
 struct NoSelfCtor; a; end
@@ -91,9 +94,21 @@ struct SNoIsEqual; a; end
     @test_throws Exception @macroexpand @batteries SErrors nonsense=true
     @macroexpand @batteries SErrors kwconstructor=true
 
-    @test hash(Salt1()) === hash(Salt1b())
-    @test hash(Salt1()) != hash(NoSalt())
-    @test hash(Salt1()) != hash(Salt2())
+    @testset "typesalt" begin
+        @test hash(Salt1()) === hash(Salt1b())
+        @test hash(Salt1()) != hash(NoSalt())
+        @test hash(Salt1()) != hash(Salt2())
+
+        # persistence
+        @test hash(Salt1())  === 0xd39a1e58a7b0c35e
+        @test hash(Salt1b()) === 0xd39a1e58a7b0c35e
+        @test hash(Salt2())  === 0x2f64a52e5f45d104
+
+        @test hash(SaltABC(1  , 2  , 3 )) === 0x92290cfd972fe54d
+        @test hash(SaltABC(10 , 2  , 3 )) === 0xcc48b9e98b6f3ef4
+        @test hash(SaltABC(10 , 20 , 3 )) === 0x6f8c614051f68ec7
+        @test hash(SaltABC(10 , 20 , 30)) === 0x90cb2b9a94741e53
+    end
 
     @test WithSelfCtor(WithSelfCtor(1)) === WithSelfCtor(1)
     @test NoSelfCtor(NoSelfCtor(1)) != NoSelfCtor(1)
@@ -152,4 +167,71 @@ struct Bad end
         @test_throws "Unsupported keyword." @macroexpand @batteries Bad does_not_exist = true   
         @test_throws "Bad keyword argument value" @macroexpand @batteries Bad hash=:nonsense
     end
+end
+
+abstract type AbstractHashEqAs end
+function SH.hash_eq_as(x::AbstractHashEqAs)
+    return x.hash_eq_as(x.payload)
+end
+
+struct HashEqAs <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAs 
+struct HashEqAsTS1 <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAsTS1 typesalt = 1
+
+struct HashEqAsTS1b <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAsTS1b typesalt = 1
+
+struct HashEqAsTS2 <: AbstractHashEqAs
+    hash_eq_as
+    payload
+end
+SH.@batteries HashEqAsTS2 typesalt = 2
+
+@testset "hash_eq_as" begin
+    @test HashEqAs(identity, 1) != HashEqAs(identity, -1)
+    @test HashEqAs(abs, 1) == HashEqAs(abs, -1)
+    @test isequal(HashEqAs(identity, 1), HashEqAs(x->x, 1))
+
+    @test hash(HashEqAs(identity, 1)) != hash(HashEqAs(identity, -1))
+    @test hash(HashEqAs(abs, 1)) === hash(HashEqAs(abs, -1))
+    @test hash(HashEqAs(identity, 1)) === hash(HashEqAs(x->x, 1))
+
+    @test hash(HashEqAsTS1(identity, 1)) != hash(HashEqAsTS1(identity, -1))
+    @test hash(HashEqAsTS1(abs, 1)) == hash(HashEqAsTS1(abs, -1))
+    @test hash(HashEqAsTS1b(abs, 1)) == hash(HashEqAsTS1(abs, -1))
+    @test hash(HashEqAsTS2(abs, 1)) != hash(HashEqAsTS1(abs, -1))
+
+    @test hash(HashEqAsTS1(x->2x::Int, 1)) === hash(HashEqAsTS1(identity, 2))
+    @test hash(HashEqAsTS2(x->2x::Int, 1)) != hash(HashEqAsTS1(identity, 2))
+    @test hash(HashEqAsTS1(identity, 1)) === 0x486b072c90d60e64
+    @test hash(HashEqAsTS2(x->5x, 1)) === 0xa4360acf486c15a4
+end
+
+mutable struct HashEqErr
+    a
+    b
+end
+Base.hash(::HashEqErr, h::UInt) = error()
+Base.isequal(::HashEqErr, ::HashEqErr) = error()
+Base.:(==)(::HashEqErr, ::HashEqErr) = error()
+
+@testset "structural hash eq" begin
+    S = HashEqErr
+    @test SH.structural_eq(S(1,3), S(1,3))
+    @test !SH.structural_eq(S(1,NaN), S(1,NaN))
+    @test SH.structural_isequal(S(1,NaN), S(1,NaN))
+    @test !SH.structural_isequal(S(2,NaN), S(1,NaN))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(1,NaN), UInt(0))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) == SH.structural_hash(S(2,NaN), UInt(0))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(2,NaN), UInt(1))
 end

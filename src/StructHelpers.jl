@@ -5,6 +5,30 @@ export @enumbatteries
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
+"""
+    hash_eq_as(obj)
+
+This allows to fine tune the behavior or `hash`, `==` and `isequal` for structs decorated by [`@batteries`](@ref).
+For instances the generated `isequal` method looks like this:
+```julia
+function Base.isequal(o1::T, o2::T)
+    proxy1 = StructHelpers.hash_eq_as(o1)
+    proxy2 = StructHelpers.hash_eq_as(o2)
+    isequal(proxy1, proxy2)
+end
+```
+Overloading `hash_eq_as` is useful for instance if you want to skip certain fields
+of `obj` or handle them in a special way.
+"""
+function hash_eq_as(obj)
+    # it would be better to just use getproperties
+    # but this would cause hashed to change, which we want to 
+    # keep backwards compatible for now.
+    #
+    # TODO: Change to getproperties once we want to make a hash breaking change
+    Tuple(getproperties(obj))
+end
+
 @inline function structural_eq(o1, o2)
     getproperties(o1) == getproperties(o2)
 end
@@ -12,8 +36,13 @@ end
     isequal(getproperties(o1), getproperties(o2))
 end
 
-start_hash(o, h, typesalt::Nothing) = Base.hash(typeof(o), h)
-start_hash(o, h, typesalt) = Base.hash(typesalt, h)
+function start_hash(o, h, typesalt::Nothing) 
+    Base.hash(typeof(o), h)
+end
+function start_hash(o, h, typesalt) 
+    Base.hash(typesalt, h)
+end
+
 @inline function structural_hash(o, h::UInt, typesalt=nothing)::UInt
     h = start_hash(o, h, typesalt)
     nt = Tuple(getproperties(o))
@@ -64,7 +93,7 @@ const BATTERIES_DOCSTRINGS = (
     kwshow        = "Overload `Base.show` such that the names of each field are printed.",
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
-    typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `getproperties(T)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
+    typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `hash_eq_as(obj)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
 )
 
 if (keys(BATTERIES_DEFAULTS) != keys(BATTERIES_DOCSTRINGS))
@@ -107,6 +136,8 @@ end
 Supported options and defaults are:
 
 $(doc_batteries_options())
+
+See also [`hash_eq_as`](@ref)
 """
 macro batteries(T, kw...)
     nt = parse_all_macro_kw(kw)
@@ -149,15 +180,26 @@ macro batteries(T, kw...)
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     if nt.hash
-        def = :(Base.hash(o::$T, h::UInt) = $(structural_hash)(o,h, $(nt.typesalt)))
+        def = :(function Base.hash(o::$T, h::UInt) 
+            h = ($start_hash)(o, h, $(nt.typesalt))
+            proxy = ($hash_eq_as)(o)
+            Base.hash(proxy, h)
+        end
+        )
         push!(ret.args, def)
     end
     if nt.eq
-        def = :(Base.:(==)(o1::$T, o2::$T) = $(structural_eq)(o1, o2))
+        def = :(function Base.:(==)(o1::$T, o2::$T)
+            ($hash_eq_as)(o1) == ($hash_eq_as)(o2)
+        end
+        )
         push!(ret.args, def)
     end
     if nt.isequal
-        def = :(Base.isequal(o1::$T, o2::$T) = $(structural_isequal)(o1, o2))
+        def = :(function Base.isequal(o1::$T, o2::$T) 
+            isequal($hash_eq_as(o1), $hash_eq_as(o2))
+        end
+        )
         push!(ret.args, def)
     end
     if nt.kwshow
