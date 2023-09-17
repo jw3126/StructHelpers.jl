@@ -166,6 +166,7 @@ struct Bad end
         @test_throws "`typesalt` must be literally `nothing` or an unsigned integer." @macroexpand @batteries Bad typesalt = "ouch"
         @test_throws "Unsupported keyword." @macroexpand @batteries Bad does_not_exist = true   
         @test_throws "Bad keyword argument value" @macroexpand @batteries Bad hash=:nonsense
+        @test_throws "Bad keyword argument value" @macroexpand @batteries Bad StructTypes=:nonsense
     end
 end
 
@@ -234,4 +235,16 @@ Base.:(==)(::HashEqErr, ::HashEqErr) = error()
     @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(1,NaN), UInt(0))
     @test SH.structural_hash(S(2,NaN), UInt(0)) == SH.structural_hash(S(2,NaN), UInt(0))
     @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(2,NaN), UInt(1))
+end
+
+struct WithStructTypes 
+    x
+    y
+end
+SH.@batteries WithStructTypes StructTypes=true
+
+import StructTypes as ST
+@testset "StructTypes" begin
+    with = WithStructTypes(1,2)
+    @test ST.StructType(typeof(with)) == ST.Struct()
 end

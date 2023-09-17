@@ -82,6 +82,7 @@ const BATTERIES_DEFAULTS = (
     getproperties = true ,
     constructorof = true ,
     typesalt      = nothing,
+    StructTypes   = false,
 )
 
 const BATTERIES_DOCSTRINGS = (
@@ -94,6 +95,7 @@ const BATTERIES_DOCSTRINGS = (
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
     typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `hash_eq_as(obj)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
+    StructTypes   = "Overload `StructTypes.StructType` to be `Struct()`. Needs the `StructTypes.jl` package to be installed.",
 )
 
 if (keys(BATTERIES_DEFAULTS) != keys(BATTERIES_DOCSTRINGS))
@@ -179,6 +181,11 @@ macro batteries(T, kw...)
     if need_fieldnames
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
+    need_StructTypes = nt.StructTypes
+    ST = gensym("ST")
+    if need_StructTypes
+        push!(ret.args, :(import StructTypes as $ST))
+    end
     if nt.hash
         def = :(function Base.hash(o::$T, h::UInt) 
             h = ($start_hash)(o, h, $(nt.typesalt))
@@ -220,6 +227,10 @@ macro batteries(T, kw...)
     end
     if nt.selfconstructor
         def = def_selfconstructor(T)
+        push!(ret.args, def)
+    end
+    if nt.StructTypes
+        def = :($ST.StructType(::Type{<:$T}) = $ST.Struct())
         push!(ret.args, def)
     end
     return esc(ret)
