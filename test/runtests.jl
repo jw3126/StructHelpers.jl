@@ -216,3 +216,22 @@ SH.@batteries HashEqAsTS2 typesalt = 2
     @test hash(HashEqAsTS1(identity, 1)) === 0x486b072c90d60e64
     @test hash(HashEqAsTS2(x->5x, 1)) === 0xa4360acf486c15a4
 end
+
+mutable struct HashEqErr
+    a
+    b
+end
+Base.hash(::HashEqErr, h::UInt) = error()
+Base.isequal(::HashEqErr, ::HashEqErr) = error()
+Base.:(==)(::HashEqErr, ::HashEqErr) = error()
+
+@testset "structural hash eq" begin
+    S = HashEqErr
+    @test SH.structural_eq(S(1,3), S(1,3))
+    @test !SH.structural_eq(S(1,NaN), S(1,NaN))
+    @test SH.structural_isequal(S(1,NaN), S(1,NaN))
+    @test !SH.structural_isequal(S(2,NaN), S(1,NaN))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(1,NaN), UInt(0))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) == SH.structural_hash(S(2,NaN), UInt(0))
+    @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(2,NaN), UInt(1))
+end
