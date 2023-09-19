@@ -182,7 +182,7 @@ macro batteries(T, kw...)
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     need_StructTypes = nt.StructTypes
-    ST = gensym("ST")
+    ST = Symbol("#StructTypes2392") # a gensym causes Revise.jl issues
     if need_StructTypes
         push!(ret.args, :(import StructTypes as $ST))
     end
