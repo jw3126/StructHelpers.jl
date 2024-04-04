@@ -236,9 +236,9 @@ macro batteries(T, kw...)
     return esc(ret)
 end
 
-function error_parse_single_macro_kw(kw; comment=nothing)
+function error_parse_macro_kw(kw; comment=nothing)
     msg = """
-    Excepted a keyword argument of the form name = value.
+    Expected a keyword argument of the form name = value.
     Got $(kw) instead.
     """
     if comment !== nothing
