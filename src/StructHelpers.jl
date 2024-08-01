@@ -5,6 +5,11 @@ export @enumbatteries
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
+# Module aliases used in macro instead of gensyms
+# if we would use gensym, this would confuse Revise
+const SH = Symbol("#StructHelpers0x6b71ed784697c19c") # a gensym causes Revise.jl issues
+const ST = Symbol("#StructTypes0xcf319831da055023") # a gensym causes Revise.jl issues
+
 """
     hash_eq_as(obj)
 
@@ -68,7 +73,7 @@ function def_getproperties(T, propertynames)
         ex = :($pname = o.$pname)
         push!(body.args, ex)
     end
-    :(StructHelpers.getproperties(o::$T) = $body)
+    :($SH.getproperties(o::$T) = $body)
 end
 
 function def_selfconstructor(T)
@@ -182,16 +187,12 @@ macro batteries(T, kw...)
     nt = merge(BATTERIES_DEFAULTS, nt)
     ret = quote end
 
-    need_StructHelpers = nt.getproperties || nt.constructorof
-    if need_StructHelpers
-        push!(ret.args, :(import StructHelpers))
-    end
+    push!(ret.args, :(import StructHelpers as $SH))
     need_fieldnames = nt.kwconstructor || nt.getproperties
     if need_fieldnames
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
     end
     need_StructTypes = nt.StructTypes
-    ST = Symbol("#StructTypes2392") # a gensym causes Revise.jl issues
     if need_StructTypes
         push!(ret.args, :(import StructTypes as $ST))
     end
@@ -227,7 +228,7 @@ macro batteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.constructorof
-        def = :(StructHelpers.constructorof(::Type{<:$T}) = $T)
+        def = :($SH.constructorof(::Type{<:$T}) = $T)
         push!(ret.args, def)
     end
     if nt.kwconstructor
@@ -248,7 +249,7 @@ end
 
 function def_has_batteries(T)
     :(
-        function ($has_batteries)(::Type{<:$T})
+        function $(SH).has_batteries(::Type{<:$T})
             true
         end
     )
@@ -317,7 +318,7 @@ end
 function def_enum_from_string(T)::Expr
     body = def_symbol_or_enum_from_string_body(string_from_enum, T)
     :(
-      function StructHelpers.enum_from_string(::Type{$T}, s::String)::$T
+      function $SH.enum_from_string(::Type{$T}, s::String)::$T
           $body
       end
      )
@@ -325,7 +326,7 @@ end
 function def_enum_from_symbol(T)::Expr
     body = def_symbol_or_enum_from_string_body(QuoteNode∘symbol_from_enum, T)
     :(
-      function StructHelpers.enum_from_symbol(::Type{$T}, s::Symbol)::$T
+      function $SH.enum_from_symbol(::Type{$T}, s::Symbol)::$T
           $body
       end
      )
@@ -424,21 +425,21 @@ macro enumbatteries(T, kw...)
     TT = Base.eval(__module__, T)::Type
     ret = quote end
 
-    push!(ret.args, :(import StructHelpers))
+    push!(ret.args, :(import StructHelpers as $SH))
     push!(ret.args, def_enum_from_symbol(TT))
     push!(ret.args, def_enum_from_string(TT))
     if nt.string_conversion
-        ex1 = :(Base.convert(::Type{$TT}, s::AbstractString) = StructHelpers.enum_from_string($TT, String(s)))
-        ex2 = :($T(s::AbstractString) = StructHelpers.enum_from_string($TT, String(s)))
-        ex3 = :(Base.convert(::Type{String}, x::$T) = StructHelpers.string_from_enum(x))
-        ex4 = :(Base.String(x::$T) = StructHelpers.string_from_enum(x))
+        ex1 = :(Base.convert(::Type{$TT}, s::AbstractString) = $SH.enum_from_string($TT, String(s)))
+        ex2 = :($T(s::AbstractString) = $SH.enum_from_string($TT, String(s)))
+        ex3 = :(Base.convert(::Type{String}, x::$T) = $SH.string_from_enum(x))
+        ex4 = :(Base.String(x::$T) = $SH.string_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
     if nt.symbol_conversion
-        ex1 = :(Base.convert(::Type{$T}, s::Symbol) = StructHelpers.enum_from_symbol($TT, Symbol(s)))
-        ex2 = :($T(s::Symbol) = StructHelpers.enum_from_symbol($TT, Symbol(s)))
-        ex3 = :(Base.convert(::Type{Symbol}, x::$T) = StructHelpers.symbol_from_enum(x))
-        ex4 = :(Base.Symbol(x::$T) = StructHelpers.symbol_from_enum(x))
+        ex1 = :(Base.convert(::Type{$T}, s::Symbol) = $SH.enum_from_symbol($TT, Symbol(s)))
+        ex2 = :($T(s::Symbol) = $SH.enum_from_symbol($TT, Symbol(s)))
+        ex3 = :(Base.convert(::Type{Symbol}, x::$T) = $SH.symbol_from_enum(x))
+        ex4 = :(Base.Symbol(x::$T) = $SH.symbol_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
     if nt.selfconstructor
