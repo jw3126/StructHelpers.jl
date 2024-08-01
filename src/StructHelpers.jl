@@ -249,7 +249,7 @@ end
 
 function def_has_batteries(T)
     :(
-        function $(SH).has_batteries(::Type{<:$T})
+        function $(SH).has_batteries(::Type{<:$T})::Bool
             true
         end
     )
