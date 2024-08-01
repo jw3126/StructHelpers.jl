@@ -93,9 +93,15 @@ struct SNoIsEqual; a; end
     @test Empty1() != Empty2()
     @test hash(Empty1()) != hash(Empty2())
     
-    @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
-    @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
-    @test_throws "Expected a keyword argument of the form name = value" @macroexpand @batteries SErrors nonsense
+    if VERSION >= v"1.8"
+        @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
+        @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
+        @test_throws "Expected a keyword argument of the form name = value" @macroexpand @batteries SErrors nonsense
+    else
+        @test_throws Exception @macroexpand @batteries  SErrors kwconstructor="true"
+        @test_throws Exception @macroexpand @batteries SErrors kwconstructor=true nonsense=true
+        @test_throws Exception @macroexpand @batteries SErrors nonsense
+    end
     
 
     @testset "typesalt" begin
