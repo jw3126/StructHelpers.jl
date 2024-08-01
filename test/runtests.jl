@@ -55,6 +55,9 @@ struct SNoIsEqual; a; end
     @test Skw(1,[]) == Skw(1,[])
     @test SNoHash(1,[]) == SNoHash(1,[])
     @test SVanilla(1,[]) != SVanilla(1,[])
+    @test SH.hasbatteries(SBatteries)
+    @test !SH.hasbatteries(SVanilla)
+    @test !SH.hasbatteries(Tuple)
 
     @test isequal(SBatteries(NaN, 1), SBatteries(NaN, 1))
     @test !isequal(SBatteries(1, 1), SBatteries(NaN, 1))
@@ -117,14 +120,17 @@ struct SNoIsEqual; a; end
     @test NoSelfCtor(NoSelfCtor(1)).a === NoSelfCtor(1)
 end
 
-@enum Color Red Blue Green
+@enum EnumNoBatteries UsesGas UsesPlug UsesMuscles
 
+@enum Color Red Blue Green
 @enumbatteries Color string_conversion = true symbol_conversion = true selfconstructor = false
 
 @enum Shape Circle Square 
 @enumbatteries Shape symbol_conversion =true
 
 @testset "@enumbatteries" begin
+    @test SH.hasbatteries(Color)
+    @test !SH.hasbatteries(EnumNoBatteries)
     @test Red === @inferred Color("Red")
     @test Red === @inferred convert(Color, "Red")
     @test "Red" === @inferred String(Red)

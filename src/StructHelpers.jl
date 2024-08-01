@@ -29,6 +29,15 @@ function hash_eq_as(obj)
     Tuple(getproperties(obj))
 end
 
+"""
+    hasbatteries(T::Type)::Bool
+
+Check if `@batteries` or `@enumbatteries` was applied to `T`.
+"""
+function hasbatteries(::Type)::Bool
+    false
+end
+
 @inline function structural_eq(o1, o2)
     getproperties(o1) == getproperties(o2)
 end
@@ -233,7 +242,16 @@ macro batteries(T, kw...)
         def = :($ST.StructType(::Type{<:$T}) = $ST.Struct())
         push!(ret.args, def)
     end
+    push!(ret.args, def_hasbatteries(T))
     return esc(ret)
+end
+
+function def_hasbatteries(T)
+    :(
+        function ($hasbatteries)(::Type{<:$T})
+            true
+        end
+    )
 end
 
 function error_parse_macro_kw(kw; comment=nothing)
@@ -427,6 +445,7 @@ macro enumbatteries(T, kw...)
         def = def_selfconstructor(T)
         push!(ret.args, def)
     end
+    push!(ret.args, def_hasbatteries(T))
     return esc(ret)
 end
 
