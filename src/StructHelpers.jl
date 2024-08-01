@@ -30,11 +30,11 @@ function hash_eq_as(obj)
 end
 
 """
-    hasbatteries(T::Type)::Bool
+    has_batteries(T::Type)::Bool
 
 Check if `@batteries` or `@enumbatteries` was applied to `T`.
 """
-function hasbatteries(::Type)::Bool
+function has_batteries(::Type)::Bool
     false
 end
 
@@ -242,13 +242,13 @@ macro batteries(T, kw...)
         def = :($ST.StructType(::Type{<:$T}) = $ST.Struct())
         push!(ret.args, def)
     end
-    push!(ret.args, def_hasbatteries(T))
+    push!(ret.args, def_has_batteries(T))
     return esc(ret)
 end
 
-function def_hasbatteries(T)
+function def_has_batteries(T)
     :(
-        function ($hasbatteries)(::Type{<:$T})
+        function ($has_batteries)(::Type{<:$T})
             true
         end
     )
@@ -445,7 +445,7 @@ macro enumbatteries(T, kw...)
         def = def_selfconstructor(T)
         push!(ret.args, def)
     end
-    push!(ret.args, def_hasbatteries(T))
+    push!(ret.args, def_has_batteries(T))
     return esc(ret)
 end
 

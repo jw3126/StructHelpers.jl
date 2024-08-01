@@ -55,9 +55,9 @@ struct SNoIsEqual; a; end
     @test Skw(1,[]) == Skw(1,[])
     @test SNoHash(1,[]) == SNoHash(1,[])
     @test SVanilla(1,[]) != SVanilla(1,[])
-    @test SH.hasbatteries(SBatteries)
-    @test !SH.hasbatteries(SVanilla)
-    @test !SH.hasbatteries(Tuple)
+    @test SH.has_batteries(SBatteries)
+    @test !SH.has_batteries(SVanilla)
+    @test !SH.has_batteries(Tuple)
 
     @test isequal(SBatteries(NaN, 1), SBatteries(NaN, 1))
     @test !isequal(SBatteries(1, 1), SBatteries(NaN, 1))
@@ -129,8 +129,8 @@ end
 @enumbatteries Shape symbol_conversion =true
 
 @testset "@enumbatteries" begin
-    @test SH.hasbatteries(Color)
-    @test !SH.hasbatteries(EnumNoBatteries)
+    @test SH.has_batteries(Color)
+    @test !SH.has_batteries(EnumNoBatteries)
     @test Red === @inferred Color("Red")
     @test Red === @inferred convert(Color, "Red")
     @test "Red" === @inferred String(Red)
