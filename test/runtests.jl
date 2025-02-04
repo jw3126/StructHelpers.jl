@@ -92,7 +92,7 @@ struct SNoIsEqual; a; end
     @test Empty1() !== Empty2()
     @test Empty1() != Empty2()
     @test hash(Empty1()) != hash(Empty2())
-    
+
     if VERSION >= v"1.8"
         @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
@@ -102,7 +102,7 @@ struct SNoIsEqual; a; end
         @test_throws Exception @macroexpand @batteries SErrors kwconstructor=true nonsense=true
         @test_throws Exception @macroexpand @batteries SErrors nonsense
     end
-    
+
 
     @testset "typesalt" begin
         @test hash(Salt1()) === hash(Salt1b())
@@ -131,8 +131,8 @@ end
 @enum Color Red Blue Green
 @enumbatteries Color string_conversion = true symbol_conversion = true selfconstructor = false
 
-@enum Shape Circle Square 
-@enumbatteries Shape symbol_conversion =true
+@enum Shape Circle = 7 Square = 8
+@enumbatteries Shape symbol_conversion = true typesalt = 0x0578044908fb9846
 
 @testset "@enumbatteries" begin
     @test SH.has_batteries(Color)
@@ -169,6 +169,9 @@ end
     @test_throws Exception convert(String, Circle)
     @test_throws Exception Shape("Circle")
     @test_throws Exception convert(Shape, "Circle")
+
+    @test hash(Circle) == hash(7, hash(0x0578044908fb9846))
+    @test hash(Square) == hash(8, hash(0x0578044908fb9846))
 end
 
 struct Bad end
@@ -177,7 +180,7 @@ struct Bad end
     @macroexpand @batteries Bad typesalt = 0xb6a4b9eeeb03b58b
     if VERSION >= v"1.7"
         @test_throws "`typesalt` must be literally `nothing` or an unsigned integer." @macroexpand @batteries Bad typesalt = "ouch"
-        @test_throws "Unsupported keyword." @macroexpand @batteries Bad does_not_exist = true   
+        @test_throws "Unsupported keyword." @macroexpand @batteries Bad does_not_exist = true
         @test_throws "Bad keyword argument value" @macroexpand @batteries Bad hash=:nonsense
         @test_throws "Bad keyword argument value" @macroexpand @batteries Bad StructTypes=:nonsense
     end
@@ -192,7 +195,7 @@ struct HashEqAs <: AbstractHashEqAs
     hash_eq_as
     payload
 end
-SH.@batteries HashEqAs 
+SH.@batteries HashEqAs
 struct HashEqAsTS1 <: AbstractHashEqAs
     hash_eq_as
     payload
@@ -250,7 +253,7 @@ Base.:(==)(::HashEqErr, ::HashEqErr) = error()
     @test SH.structural_hash(S(2,NaN), UInt(0)) != SH.structural_hash(S(2,NaN), UInt(1))
 end
 
-struct WithStructTypes 
+struct WithStructTypes
     x
     y
 end

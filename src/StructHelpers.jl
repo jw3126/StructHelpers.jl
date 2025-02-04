@@ -27,7 +27,7 @@ of `obj` or handle them in a special way.
 """
 function hash_eq_as(obj)
     # it would be better to just use getproperties
-    # but this would cause hashed to change, which we want to 
+    # but this would cause hashed to change, which we want to
     # keep backwards compatible for now.
     #
     # TODO: Change to getproperties once we want to make a hash breaking change
@@ -50,10 +50,10 @@ end
     isequal(getproperties(o1), getproperties(o2))
 end
 
-function start_hash(o, h, typesalt::Nothing) 
+function start_hash(o, h, typesalt::Nothing)
     Base.hash(typeof(o), h)
 end
-function start_hash(o, h, typesalt) 
+function start_hash(o, h, typesalt)
     Base.hash(typesalt, h)
 end
 
@@ -166,15 +166,10 @@ macro batteries(T, kw...)
                 Got: $nt
             """)
         end
-        if val isa Bool
-
-        elseif pname == :typesalt
-            typesalt = val
-            if !(typesalt isa Union{Nothing,Integer})
-                error("""`typesalt` must be literally `nothing` or an unsigned integer. Got:
-                      typesalt = $(repr(typesalt))::$(typeof(typesalt))
-                      """)
-            end
+        if pname == :typesalt
+            check_typesalt(val)
+        elseif val isa Bool
+            # pass
         else
             error("""
                 Bad keyword argument value:
@@ -197,7 +192,7 @@ macro batteries(T, kw...)
         push!(ret.args, :(import StructTypes as $ST))
     end
     if nt.hash
-        def = :(function Base.hash(o::$T, h::UInt) 
+        def = :(function Base.hash(o::$T, h::UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
             proxy = ($hash_eq_as)(o)
             Base.hash(proxy, h)
@@ -213,7 +208,7 @@ macro batteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.isequal
-        def = :(function Base.isequal(o1::$T, o2::$T) 
+        def = :(function Base.isequal(o1::$T, o2::$T)
             isequal($hash_eq_as(o1), $hash_eq_as(o2))
         end
         )
@@ -253,6 +248,17 @@ function def_has_batteries(T)
             true
         end
     )
+end
+
+function check_typesalt(typesalt)
+    if !(typesalt isa Union{Nothing,Integer})
+        error(
+            """
+            `typesalt` must be literally `nothing` or an unsigned integer. Got:
+            typesalt = $(repr(typesalt))::$(typeof(typesalt))
+            """
+        )
+    end
 end
 
 function error_parse_macro_kw(kw; comment=nothing)
@@ -351,15 +357,19 @@ function def_symbol_or_enum_from_string_body(f,T)
 end
 
 const ENUM_BATTERIES_DEFAULTS = (
-    string_conversion=false,
-    symbol_conversion=false,
-    selfconstructor=BATTERIES_DEFAULTS.selfconstructor,
+    string_conversion = false,
+    symbol_conversion = false,
+    selfconstructor   = BATTERIES_DEFAULTS.selfconstructor,
+    hash              = BATTERIES_DEFAULTS.hash,
+    typesalt          = BATTERIES_DEFAULTS.typesalt,
 )
 
 const ENUM_BATTERIES_DOCSTRINGS = (
-    string_conversion="Add `convert(MyEnum, ::String)`, `MyEnum(::String)`, `convert(String, ::MyEnum)` and `String(::MyEnum)`",
-    symbol_conversion="Add `convert(MyEnum, ::Symbol)`, `MyEnum(::Symbol)`, `convert(Symbol, ::MyEnum)` and `Symbol(::MyEnum)`",
-    selfconstructor=BATTERIES_DOCSTRINGS.selfconstructor,
+    string_conversion = "Add `convert(MyEnum, ::String)`, `MyEnum(::String)`, `convert(String, ::MyEnum)` and `String(::MyEnum)`",
+    symbol_conversion = "Add `convert(MyEnum, ::Symbol)`, `MyEnum(::Symbol)`, `convert(Symbol, ::MyEnum)` and `Symbol(::MyEnum)`",
+    selfconstructor   = BATTERIES_DOCSTRINGS.selfconstructor,
+    hash              = BATTERIES_DOCSTRINGS.hash,
+    typesalt          = BATTERIES_DOCSTRINGS.typesalt,
 )
 
 if (keys(ENUM_BATTERIES_DEFAULTS) != keys(ENUM_BATTERIES_DOCSTRINGS))
@@ -410,8 +420,10 @@ macro enumbatteries(T, kw...)
                 Got: $nt
             """)
         end
-        if val isa Bool
-
+        if pname == :typesalt
+            check_typesalt(val)
+        elseif val isa Bool
+            # pass
         else
             error("""
                 Bad keyword argument value:
@@ -444,6 +456,14 @@ macro enumbatteries(T, kw...)
     end
     if nt.selfconstructor
         def = def_selfconstructor(T)
+        push!(ret.args, def)
+    end
+    if nt.hash
+        def = :(function Base.hash(o::$T, h::UInt)
+            h = ($start_hash)(o, h, $(nt.typesalt))
+            Base.hash(UInt(o), h)
+        end
+        )
         push!(ret.args, def)
     end
     push!(ret.args, def_has_batteries(T))
