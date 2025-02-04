@@ -38,6 +38,7 @@ end
     has_batteries(T::Type)::Bool
 
 Check if `@batteries` or `@enumbatteries` was applied to `T`.
+See also [`batteries_options`](@ref).
 """
 function has_batteries(::Type)::Bool
     false
@@ -238,15 +239,29 @@ macro batteries(T, kw...)
         def = :($ST.StructType(::Type{<:$T}) = $ST.Struct())
         push!(ret.args, def)
     end
-    push!(ret.args, def_has_batteries(T))
+    append!(ret.args, defs_has_batteries(T, nt))
     return esc(ret)
 end
 
-function def_has_batteries(T)
-    :(
+"""
+
+    batteries_options(::Type{T})::NamedTuple
+
+Return the options for `@batteries` for type `T`. Assumes that `has_batteries(T) == true` holds.
+"""
+function batteries_options end
+
+function defs_has_batteries(T, options)
+    (
+        :(
         function $(SH).has_batteries(::Type{<:$T})::Bool
             true
+        end),
+        :(
+        function $(SH).batteries_options(::Type{<:$T})::typeof($options)
+            return $options
         end
+        )
     )
 end
 
@@ -466,7 +481,7 @@ macro enumbatteries(T, kw...)
         )
         push!(ret.args, def)
     end
-    push!(ret.args, def_has_batteries(T))
+    append!(ret.args, defs_has_batteries(T, nt))
     return esc(ret)
 end
 
