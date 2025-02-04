@@ -461,7 +461,7 @@ macro enumbatteries(T, kw...)
     if nt.hash
         def = :(function Base.hash(o::$T, h::UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
-            Base.hash(UInt(o), h)
+            Base.hash(Integer(o), h)
         end
         )
         push!(ret.args, def)

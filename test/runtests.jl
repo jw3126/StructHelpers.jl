@@ -174,6 +174,9 @@ end
     @test_throws Exception convert(Shape, "Circle")
 end
 
+@enum Negative MinusOne=-1 MinusTwo=-2 MinusThree=-3
+@enumbatteries Negative typesalt = 0xd11b6121f2b8cd22
+
 @testset "@enumbatteries hash" begin
     # hash with typesalt
     @test hash(Circle) == hash(7, hash(0x0578044908fb9846))
@@ -186,6 +189,11 @@ end
 
     # no hash by default
     @test hash(Red) != hash(0, hash(Color))
+
+    h = 0xed315b93bf264f3e
+    typesalt = 0xd11b6121f2b8cd22
+    @test hash(MinusOne, h) == hash(-1, hash(typesalt, h))
+    @test hash(MinusTwo, h) == hash(-2, hash(typesalt, h))
 end
 
 struct Bad end
