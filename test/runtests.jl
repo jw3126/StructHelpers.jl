@@ -109,7 +109,6 @@ struct SNoIsEqual; a; end
         @test SH.batteries_options(Salt1b).typesalt == 1
         @test SH.batteries_options(Salt2).typesalt == 2
         @test SH.batteries_options(NoSalt).typesalt === nothing
-        @show SH.batteries_options(Salt1)
         @test hash(Salt1()) === hash(Salt1b())
         @test hash(Salt1()) != hash(NoSalt())
         @test hash(Salt1()) != hash(Salt2())

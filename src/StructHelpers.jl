@@ -258,7 +258,7 @@ function defs_has_batteries(T, options)
             true
         end),
         :(
-        function $(SH).batteries_options(::Type{<:$T})::typeof($options)
+        function $(SH).batteries_options(::Type{<:$T})::$(typeof(options))
             return $options
         end
         )
