@@ -134,6 +134,9 @@ end
 @enum Shape Circle = 7 Square = 8
 @enumbatteries Shape symbol_conversion = true typesalt = 0x0578044908fb9846
 
+@enum Size Small Medium Large
+@enumbatteries Size hash = true
+
 @testset "@enumbatteries" begin
     @test SH.has_batteries(Color)
     @test !SH.has_batteries(EnumNoBatteries)
@@ -169,9 +172,20 @@ end
     @test_throws Exception convert(String, Circle)
     @test_throws Exception Shape("Circle")
     @test_throws Exception convert(Shape, "Circle")
+end
 
+@testset "@enumbatteries hash" begin
+    # hash with typesalt
     @test hash(Circle) == hash(7, hash(0x0578044908fb9846))
     @test hash(Square) == hash(8, hash(0x0578044908fb9846))
+
+    # hash = true
+    @test hash(Small) == hash(0, hash(Size))
+    @test hash(Medium) == hash(1, hash(Size))
+    @test hash(Large) == hash(2, hash(Size))
+
+    # no hash by default
+    @test hash(Red) != hash(0, hash(Color))
 end
 
 struct Bad end

@@ -360,7 +360,7 @@ const ENUM_BATTERIES_DEFAULTS = (
     string_conversion = false,
     symbol_conversion = false,
     selfconstructor   = BATTERIES_DEFAULTS.selfconstructor,
-    hash              = BATTERIES_DEFAULTS.hash,
+    hash              = false,
     typesalt          = BATTERIES_DEFAULTS.typesalt,
 )
 
@@ -433,7 +433,7 @@ macro enumbatteries(T, kw...)
             """)
         end
     end
-    nt = merge(ENUM_BATTERIES_DEFAULTS, nt)
+    nt = merge(ENUM_BATTERIES_DEFAULTS, (; hash = haskey(nt, :typesalt)), nt)
     TT = Base.eval(__module__, T)::Type
     ret = quote end
 
