@@ -315,14 +315,21 @@ end
 function enum_from_string end
 function enum_from_symbol end
 function string_from_enum(x)::String
+    string_from_enum_generic(x)
+end
+function string_from_enum_generic(x)::String
     string(x)
 end
+
 function symbol_from_enum(x)::Symbol
-    Symbol(string_from_enum(x))
+    symbol_from_enum_generic(x)
+end
+function symbol_from_enum_generic(x)::Symbol
+    Symbol(string_from_enum_generic(x))
 end
 
 function def_enum_from_string(T)::Expr
-    body = def_symbol_or_enum_from_string_body(string_from_enum, T)
+    body = def_enum_from_string_or_symbol_body(string_from_enum, T)
     :(
       function $SH.enum_from_string(::Type{$T}, s::String)::$T
           $body
@@ -330,7 +337,7 @@ function def_enum_from_string(T)::Expr
      )
 end
 function def_enum_from_symbol(T)::Expr
-    body = def_symbol_or_enum_from_string_body(QuoteNode∘symbol_from_enum, T)
+    body = def_enum_from_string_or_symbol_body(QuoteNode∘symbol_from_enum, T)
     :(
       function $SH.enum_from_symbol(::Type{$T}, s::Symbol)::$T
           $body
@@ -348,7 +355,33 @@ end
     throw(ArgumentError(msg))
 end
 
-function def_symbol_or_enum_from_string_body(f,T)
+function def_symbol_or_string_from_enum_body(s_from_enum_generic, T)::Expr
+    default = :($s_from_enum_generic(obj))
+    matcharms = [
+        :(obj === $inst) => QuoteNode(s_from_enum_generic(inst)) for inst in instances(T)
+                ]
+    ifelsechain(matcharms, default)
+end
+
+function def_symbol_from_enum(T)::Expr
+    body = def_symbol_or_string_from_enum_body(symbol_from_enum_generic, T)
+    :(
+      function $SH.symbol_from_enum(obj::$T)::Symbol
+          $body
+      end
+     )
+end
+
+function def_string_from_enum(T)::Expr
+    body = def_symbol_or_string_from_enum_body(string_from_enum_generic, T)
+    :(
+      function $SH.string_from_enum(obj::$T)::String
+          $body
+      end
+     )
+end
+
+function def_enum_from_string_or_symbol_body(f,T)
     err = :($throw_no_matching_instance($f,$T,s))
     matcharms = [
         :(s === $(f(inst))) => inst for inst in instances(T)
@@ -440,6 +473,8 @@ macro enumbatteries(T, kw...)
     push!(ret.args, :(import StructHelpers as $SH))
     push!(ret.args, def_enum_from_symbol(TT))
     push!(ret.args, def_enum_from_string(TT))
+    push!(ret.args, def_symbol_from_enum(TT))
+    push!(ret.args, def_string_from_enum(TT))
     if nt.string_conversion
         ex1 = :(Base.convert(::Type{$TT}, s::AbstractString) = $SH.enum_from_string($TT, String(s)))
         ex2 = :($T(s::AbstractString) = $SH.enum_from_string($TT, String(s)))
