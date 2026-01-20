@@ -105,6 +105,10 @@ struct SNoIsEqual; a; end
 
 
     @testset "typesalt" begin
+        @test SH.batteries_options(Salt1).typesalt == 1
+        @test SH.batteries_options(Salt1b).typesalt == 1
+        @test SH.batteries_options(Salt2).typesalt == 2
+        @test SH.batteries_options(NoSalt).typesalt === nothing
         @test hash(Salt1()) === hash(Salt1b())
         @test hash(Salt1()) != hash(NoSalt())
         @test hash(Salt1()) != hash(Salt2())
@@ -121,6 +125,8 @@ struct SNoIsEqual; a; end
     end
 
     @test WithSelfCtor(WithSelfCtor(1)) === WithSelfCtor(1)
+    @test SH.batteries_options(WithSelfCtor).selfconstructor === true
+    @test SH.batteries_options(NoSelfCtor).selfconstructor === false
     @test NoSelfCtor(NoSelfCtor(1)) != NoSelfCtor(1)
     @test NoSelfCtor(NoSelfCtor(1)) isa NoSelfCtor
     @test NoSelfCtor(NoSelfCtor(1)).a === NoSelfCtor(1)
@@ -192,6 +198,7 @@ end
 
     h = 0xed315b93bf264f3e
     typesalt = 0xd11b6121f2b8cd22
+    @test SH.batteries_options(Negative).typesalt === typesalt
     @test hash(MinusOne, h) == hash(-1, hash(typesalt, h))
     @test hash(MinusTwo, h) == hash(-2, hash(typesalt, h))
 end
