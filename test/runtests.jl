@@ -109,15 +109,23 @@ struct SNoIsEqual; a; end
         @test hash(Salt1()) != hash(NoSalt())
         @test hash(Salt1()) != hash(Salt2())
 
-        # persistence
-        @test hash(Salt1())  === 0xd39a1e58a7b0c35e
-        @test hash(Salt1b()) === 0xd39a1e58a7b0c35e
-        @test hash(Salt2())  === 0x2f64a52e5f45d104
+        # The contract for `typesalt = N` is
+        #   hash(o, h) == hash(hash_eq_as(o), hash(N, h))
+        # which (by design) excludes the type identity itself. We check
+        # this contract directly; pinning literal hash values would be
+        # fragile because `hash(::Tuple, ::UInt)` is not stable across
+        # Julia versions. We pass an explicit seed `h` so the check does
+        # not depend on `hash(x)`'s no-arg default (which changed in
+        # Julia 1.11+ to use a randomized initial seed).
+        let h = UInt(0)
+            @test hash(Salt1(), h) === hash((), hash(1, h))
+            @test hash(Salt2(), h) === hash((), hash(2, h))
 
-        @test hash(SaltABC(1  , 2  , 3 )) === 0x92290cfd972fe54d
-        @test hash(SaltABC(10 , 2  , 3 )) === 0xcc48b9e98b6f3ef4
-        @test hash(SaltABC(10 , 20 , 3 )) === 0x6f8c614051f68ec7
-        @test hash(SaltABC(10 , 20 , 30)) === 0x90cb2b9a94741e53
+            @test hash(SaltABC(1  , 2  , 3 ), h) === hash((1,  2,  3 ), hash(1, h))
+            @test hash(SaltABC(10 , 2  , 3 ), h) === hash((10, 2,  3 ), hash(1, h))
+            @test hash(SaltABC(10 , 20 , 3 ), h) === hash((10, 20, 3 ), hash(1, h))
+            @test hash(SaltABC(10 , 20 , 30), h) === hash((10, 20, 30), hash(1, h))
+        end
     end
 
     @test WithSelfCtor(WithSelfCtor(1)) === WithSelfCtor(1)
