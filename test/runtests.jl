@@ -94,6 +94,10 @@ function SH.default_keywords(::Type{CountedDefaults})
     (a = 1, b = 2)
 end
 
+# Bare-flag sugar: `flag` ≡ `flag=true`, mixable with `flag=value`.
+struct SBare; a; b; end
+@batteries SBare kwconstructor kwshow hash=false
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -141,11 +145,20 @@ end
     if VERSION >= v"1.8"
         @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
-        @test_throws "Expected a keyword argument of the form name = value" @macroexpand @batteries SErrors nonsense
+        # Bare symbol is now sugar for `=true`, so an unknown bare flag fails
+        # as an unsupported keyword rather than as a parse error.
+        @test_throws "Unsupported keyword" @macroexpand @batteries SErrors nonsense
     else
         @test_throws Exception @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws Exception @macroexpand @batteries SErrors kwconstructor=true nonsense=true
         @test_throws Exception @macroexpand @batteries SErrors nonsense
+    end
+
+    @testset "bare-flag sugar" begin
+        # Bare flag works as a substitute for `=true` and is freely mixable
+        # with explicit `=` assignments.
+        @test SBare(a=1, b=2) == SBare(1, 2)            # kwconstructor enabled
+        @test sprint(show, SBare(1, 2)) == "SBare(a = 1, b = 2)"  # kwshow enabled
     end
 
 

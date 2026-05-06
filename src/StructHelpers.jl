@@ -225,6 +225,7 @@ end
 @batteries S
 @batteries S hash=false # don't overload `Base.hash`
 @batteries S kwconstructor=true # add a keyword constructor
+@batteries S kwconstructor      # bare symbol is shorthand for `kwconstructor=true`
 ```
 
 Supported options and defaults are:
@@ -355,6 +356,12 @@ function error_parse_macro_kw(kw; comment=nothing)
     error(msg)
 end
 function parse_single_macro_kw(kw)
+    # Bare-symbol shorthand: `flag` is sugar for `flag=true`. Lets users write
+    # `@batteries T kwconstructor` instead of `@batteries T kwconstructor=true`.
+    # The resulting `flag => true` is then validated by the macro itself, so
+    # bare symbols that don't name a Bool option (e.g. `typesalt`) still
+    # produce the standard "Bad keyword argument value" error.
+    kw isa Symbol && return (kw => true)
     Meta.isexpr(kw, Symbol("=")) || error_parse_macro_kw(kw)
     length(kw.args) == 2 || error_parse_macro_kw(kw)
     key, val = kw.args
@@ -519,6 +526,7 @@ Automatically derive several methods for Enum type `T`.
 @enumbatteries Color
 @enumbatteries Color hash=false # don't overload `Base.hash`
 @enumbatteries Color symbol_conversion=true # allow convert(Color, :Blue), Color(:Blue), convert(Symbol, Blue), Symbol(Blue)
+@enumbatteries Color symbol_conversion      # bare symbol is shorthand for `symbol_conversion=true`
 ```
 
 Supported options and defaults are:
