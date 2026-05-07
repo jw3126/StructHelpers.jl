@@ -260,8 +260,18 @@ SH.@batteries HashEqAsTS2 typesalt = 2
 
     @test hash(HashEqAsTS1(x->2x::Int, 1)) === hash(HashEqAsTS1(identity, 2))
     @test hash(HashEqAsTS2(x->2x::Int, 1)) != hash(HashEqAsTS1(identity, 2))
-    @test hash(HashEqAsTS1(identity, 1)) === 0x486b072c90d60e64
-    @test hash(HashEqAsTS2(x->5x, 1)) === 0xa4360acf486c15a4
+    # The contract for `typesalt = N` is
+    #   hash(o, h) == hash(hash_eq_as(o), hash(N, h))
+    # which (by design) excludes the type identity itself. We check
+    # this contract directly; pinning literal hash values would be
+    # fragile because `hash(::Int, ::UInt)` is not stable across Julia
+    # versions. We pass an explicit seed `h` so the check does not
+    # depend on `hash(x)`'s no-arg default (which changed in Julia
+    # 1.11+ to use a randomized initial seed).
+    let h = UInt(0)
+        @test hash(HashEqAsTS1(identity, 1), h) === hash(1, hash(1, h))
+        @test hash(HashEqAsTS2(x->5x, 1), h)    === hash(5, hash(2, h))
+    end
 end
 
 mutable struct HashEqErr
