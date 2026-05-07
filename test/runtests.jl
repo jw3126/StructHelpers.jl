@@ -1,4 +1,4 @@
-using StructHelpers: @batteries, StructHelpers, @enumbatteries
+using StructHelpers: @batteries, @battery, StructHelpers, @enumbatteries, @enumbattery
 const SH = StructHelpers
 using Test
 
@@ -246,6 +246,58 @@ end
     @test COUNTED_DEFAULTS_CALLS[] == 1
 end
 
+# `@battery T ...`: opt-in variant where every default is `false`. Only
+# the listed batteries are derived; nothing else.
+struct BatOnlyKwconstructor; a; b; end
+@battery BatOnlyKwconstructor kwconstructor
+
+struct BatOnlyEqIsequal; a; end
+@battery BatOnlyEqIsequal eq isequal
+
+struct BatOnlyHash; a; end
+@battery BatOnlyHash hash typesalt=0xabcdef0123456789
+
+struct BatNothing; a; end
+@battery BatNothing  # legal: derives only `has_batteries`
+
+@testset "@battery" begin
+    # `kwconstructor` enabled, but no `==`, `isequal`, `hash`,
+    # `getproperties`, `constructorof`, `selfconstructor`.
+    @test BatOnlyKwconstructor(a=1, b=2).a == 1
+    # No structural ==: two structurally equal objects compare false (===),
+    # but the default Julia `==` on structs (egal-by-fields for immutables)
+    # may still return true. We assert the *macro* didn't define one by
+    # checking that `Base.:(==)(::T,::T)` is the generic fallback method,
+    # i.e. that no method was added with both args ::BatOnlyKwconstructor.
+    @test !any(methods(==, (BatOnlyKwconstructor, BatOnlyKwconstructor))) do m
+        m.sig === Tuple{typeof(==), BatOnlyKwconstructor, BatOnlyKwconstructor}
+    end
+    # No selfconstructor: outer-of-outer wraps rather than passes through.
+    @test BatOnlyKwconstructor(BatOnlyKwconstructor(1, 2), 3).a isa BatOnlyKwconstructor
+
+    # `eq` and `isequal` enabled; `hash` is NOT — verify by checking that
+    # no specialized `Base.hash(::T, ::UInt)` method exists.
+    @test BatOnlyEqIsequal(1) == BatOnlyEqIsequal(1)
+    @test isequal(BatOnlyEqIsequal(1), BatOnlyEqIsequal(1))
+    @test !any(methods(hash, (BatOnlyEqIsequal, UInt))) do m
+        m.sig === Tuple{typeof(hash), BatOnlyEqIsequal, UInt}
+    end
+
+    # `hash` + `typesalt` works in subset mode without auto-enabling
+    # anything else.
+    h = 0x123456789abcdef0
+    @test hash(BatOnlyHash(7), h) == hash((7,), hash(0xabcdef0123456789, h))
+
+    # `@battery T` with no flags is legal (only `has_batteries` is set).
+    @test StructHelpers.has_batteries(BatNothing)
+
+    # `@battery` rejects unknown keywords just like `@batteries`.
+    if VERSION >= v"1.8"
+        @test_throws "Unsupported keyword" @macroexpand @battery BatNothing nonsense
+        @test_throws "Bad keyword argument value" @macroexpand @battery BatNothing kwshow="true"
+    end
+end
+
 @enum EnumNoBatteries UsesGas UsesPlug UsesMuscles
 
 @enum Color Red Blue Green
@@ -314,6 +366,33 @@ end
     typesalt = 0xd11b6121f2b8cd22
     @test hash(MinusOne, h) == hash(-1, hash(typesalt, h))
     @test hash(MinusTwo, h) == hash(-2, hash(typesalt, h))
+end
+
+# `@enumbattery T ...`: opt-in variant of `@enumbatteries`.
+@enum ECol1 ECol1A ECol1B
+@enumbattery ECol1 symbol_conversion
+
+@enum ECol2 ECol2A=4 ECol2B=5
+@enumbattery ECol2 hash typesalt=0xfedcba9876543210
+
+@enum ECol3 ECol3A ECol3B
+@enumbattery ECol3  # legal: only the always-on enum_from_*/from_enum methods + has_batteries
+
+@testset "@enumbattery" begin
+    # symbol_conversion enabled, string_conversion not.
+    @test ECol1(:ECol1A) === ECol1A
+    @test Symbol(ECol1A) === :ECol1A
+    @test_throws Exception ECol1("ECol1A")          # string_conversion off
+    # selfconstructor off too: ECol1(::ECol1) is not defined.
+    @test_throws Exception ECol1(ECol1A)
+
+    # hash + typesalt works without auto-enabling anything else.
+    h = 0x55aa55aa55aa55aa
+    @test hash(ECol2A, h) == hash(4, hash(0xfedcba9876543210, h))
+
+    # Empty `@enumbattery` is legal; the always-on methods are there.
+    @test StructHelpers.has_batteries(ECol3)
+    @test StructHelpers.string_from_enum(ECol3A) == "ECol3A"
 end
 
 struct Bad end
