@@ -195,6 +195,7 @@ struct SBare; a; b; end
     @test NoSelfCtor(NoSelfCtor(1)).a === NoSelfCtor(1)
 end
 
+<<<<<<< HEAD
 @testset "default_keywords" begin
     @test SH.default_keywords(SBatteries) === NamedTuple()
     @test SH.default_keywords(WithDefaults) === (a = 1, b = 2)
@@ -249,6 +250,8 @@ end
     @test COUNTED_DEFAULTS_CALLS[] == 1
 end
 
+=======
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
 # `@battery T ...`: opt-in variant where every default is `false`. Only
 # the listed batteries are derived; nothing else.
 struct BatOnlyKwconstructor; a; b; end
@@ -296,14 +299,19 @@ struct BatNothing; a; end
 
     # `@battery` rejects unknown keywords just like `@batteries`.
     if VERSION >= v"1.8"
+<<<<<<< HEAD
         # Bare symbol that is neither a flag nor bound to a NamedTuple
         # triggers the config-eval path and reports a "Bad argument"
         # error with the underlying UndefVarError.
         @test_throws "Bad argument" @macroexpand @battery BatNothing nonsense
+=======
+        @test_throws "Unsupported keyword" @macroexpand @battery BatNothing nonsense
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
         @test_throws "Bad keyword argument value" @macroexpand @battery BatNothing kwshow="true"
     end
 end
 
+<<<<<<< HEAD
 # `NamedTuple`-config splatting: any macro argument that is neither a
 # flag nor `name=value` is evaluated in the calling module and its
 # `pairs(...)` are spliced in. Later args override earlier ones.
@@ -450,6 +458,8 @@ struct CfgExplicit; a; end
     end
 end
 
+=======
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
 @enum EnumNoBatteries UsesGas UsesPlug UsesMuscles
 
 @enum Color Red Blue Green

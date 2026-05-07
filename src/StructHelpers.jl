@@ -302,6 +302,7 @@ end
 @battery S hash typesalt=0xab  # only define hash, with stable typesalt
 ```
 
+<<<<<<< HEAD
 `@battery` accepts the same `NamedTuple` config splatting as
 [`@batteries`](@ref):
 
@@ -311,6 +312,8 @@ const minimal = (kwshow=true, kwconstructor=true)
 @battery T minimal eq=true     # the two from `minimal` plus structural ==
 ```
 
+=======
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
 Supported options are the same as for [`@batteries`](@ref); only the
 defaults differ (every Bool defaults to `false`, `typesalt` to `nothing`).
 """
@@ -323,7 +326,11 @@ end
 # (everything off). The same validation and emission logic is used in both
 # cases.
 function def_batteries(__module__, T, kw, base)
+<<<<<<< HEAD
     nt = parse_all_macro_kw(kw, __module__, propertynames(BATTERIES_DEFAULTS))
+=======
+    nt = parse_all_macro_kw(kw)
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(BATTERIES_DEFAULTS))
             error("""
@@ -713,7 +720,11 @@ end
 # `ENUM_BATTERIES_NONE` (everything off, except the always-on
 # `enum_from_*` / `*_from_enum` methods).
 function def_enumbatteries(__module__, T, kw, base)
+<<<<<<< HEAD
     nt = parse_all_macro_kw(kw, __module__, propertynames(ENUM_BATTERIES_DEFAULTS))
+=======
+    nt = parse_all_macro_kw(kw)
+>>>>>>> 21ccef6 (Add @battery / @enumbattery: opt-in counterparts to @batteries)
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(ENUM_BATTERIES_DEFAULTS))
             error("""
