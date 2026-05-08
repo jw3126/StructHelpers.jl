@@ -337,6 +337,25 @@ struct CfgE; a; b; end
 struct CfgF; a; end
 @battery CfgF config_kwshow_kwconst eq
 
+# 7. Multiple disjoint configs combined with a per-struct override.
+const cfg_part_kwshow         = (kwshow=true,)
+const cfg_part_kwconstructor  = (kwconstructor=true,)
+const cfg_part_typesalt       = (typesalt=0x42,)
+struct CfgG; a; b; end
+@batteries CfgG cfg_part_kwshow cfg_part_kwconstructor cfg_part_typesalt typesalt=0x99
+
+# Forward-compatibility regression test: a bare symbol that names *both*
+# a flag *and* a NamedTuple binding in the calling module must resolve
+# to the binding (so future flag additions cannot silently shadow user
+# configs sharing the new flag's name). `kwconstructor` is an existing
+# flag; the binding below maps it to a NamedTuple that turns on
+# `kwshow` instead — proving the binding won and the flag did not.
+const kwconstructor = (kwshow = true,)
+struct CfgShadow; a; end
+@battery CfgShadow kwconstructor
+struct CfgExplicit; a; end
+@battery CfgExplicit kwconstructor = true
+
 @testset "NamedTuple config splat" begin
     # The behavior of every individual flag (kwshow, kwconstructor, ==,
     # isequal, hash, typesalt, ...) is already exercised exhaustively
@@ -380,16 +399,53 @@ struct CfgF; a; end
     @test !has_method(isequal, (CfgF, CfgF))
     @test !has_method(hash,    (CfgF, UInt))
 
+    # 7. Multiple disjoint configs + per-struct override. All three
+    #    config NamedTuples are spliced in; the explicit `typesalt`
+    #    overrides the one set by `cfg_part_typesalt`. Because this is
+    #    `@batteries` (not `@battery`), the defaults still apply for
+    #    keys none of the configs touched.
+    @test CfgG(a=1, b=2) === CfgG(1, 2)
+    @test sprint(show, CfgG(1, 2)) == "CfgG(a = 1, b = 2)"
+    let h = UInt(0)
+        # typesalt from explicit override, not from cfg_part_typesalt.
+        @test hash(CfgG(7, 8), h) === hash((7, 8), hash(0x99, h))
+        @test hash(CfgG(7, 8), h) !== hash((7, 8), hash(0x42, h))
+    end
+    # Defaults untouched by any of the three configs are still on:
+    @test  has_method(==, (CfgG, CfgG))
+    @test  has_method(isequal, (CfgG, CfgG))
+    @test  has_method(hash, (CfgG, UInt))
+    # And the methods actually defined by the configs are there:
+    @test  has_method(show, (IO, CfgG))
+    @test  hasmethod(CfgG, Tuple{}, (:a, :b))
+
     @testset "errors" begin
         if VERSION >= v"1.8"
             # Bare symbol that's neither a flag nor a binding.
             @test_throws "Bad argument" @macroexpand @batteries CfgA undefined_config
-            # Bound but not a NamedTuple.
+            # Bound but not a NamedTuple, and not a flag name either.
             global not_a_namedtuple = 42
             @test_throws "Bad argument" @macroexpand(@batteries CfgA not_a_namedtuple)
             # Inline non-NamedTuple expression.
             @test_throws "Bad argument" @macroexpand @batteries CfgA 1 + 2
         end
+    end
+
+    @testset "binding wins over flag name" begin
+        # Forward-compatibility guarantee: when a bare symbol names
+        # *both* a flag *and* a NamedTuple binding in the calling
+        # module, the binding wins. This means StructHelpers can add
+        # new flags in the future without silently shadowing a user's
+        # const config that happens to share the new flag's name; the
+        # user only needs to rename the binding (or spell the flag
+        # explicitly as `flag = true`) to opt into the new flag.
+        @test :kwconstructor in StructHelpers.BATTERIES_ALLOWED_KW
+        # The NamedTuple binding was splatted ⇒ kwshow is on.
+        @test sprint(show, CfgShadow(1)) == "CfgShadow(a = 1,)"
+        # The flag interpretation was *not* taken ⇒ no kw constructor.
+        @test_throws MethodError CfgShadow(a = 1)
+        # The explicit form still reaches the flag.
+        @test CfgExplicit(a = 1).a == 1
     end
 end
 

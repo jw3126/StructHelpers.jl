@@ -259,6 +259,17 @@ overrides after a config splat behave as expected. The bare-flag
 shorthand is reserved for call sites and not stored in `NamedTuple`s
 — spell config entries as `flag = true`.
 
+## Bare-symbol resolution
+
+A bare symbol argument is resolved by checking the calling module
+*first*: if it names a `NamedTuple` binding, that binding is splatted;
+otherwise, if it names a flag, it is treated as `flag = true`. User
+bindings winning over flag names is deliberate, so adding new flags
+in future versions of `StructHelpers` cannot silently shadow a user's
+config binding that happens to share the new flag's name. To adopt a
+newly added flag with a colliding binding name, either rename the
+binding or spell the flag explicitly as `flag = true`.
+
 Supported options and defaults are:
 
 $(doc_batteries_options())
@@ -456,12 +467,31 @@ end
 function parse_single_macro_kw(kw, __module__, allowed_keys)
     # Bare-symbol shorthand: `flag` is sugar for `flag=true`. Lets users
     # write `@batteries T kwconstructor` instead of
-    # `@batteries T kwconstructor=true`. Only symbols naming an actual
-    # flag are treated as such; other bare symbols are evaluated as
-    # NamedTuple-valued bindings (config-style) and splatted.
+    # `@batteries T kwconstructor=true`. We resolve a bare symbol by
+    # checking the caller's module *first*: if it names a `NamedTuple`
+    # binding, we splat it as config; otherwise, if it names a flag, we
+    # treat it as `flag=true`. User bindings winning over flag names is
+    # deliberate — it means StructHelpers can add new flags in future
+    # versions without silently shadowing a user's config binding that
+    # happens to share the new flag's name. The user only needs to
+    # rename their binding (or spell the new flag as `flag=true`) to
+    # adopt the new option.
     if kw isa Symbol
-        return kw in allowed_keys ? Pair{Symbol,Any}[kw => true] :
-                                    eval_namedtuple_arg(kw, __module__)
+        if isdefined(__module__, kw)
+            val = Base.eval(__module__, kw)
+            if val isa NamedTuple
+                return Pair{Symbol,Any}[k => v for (k, v) in pairs(val)]
+            end
+        end
+        if kw in allowed_keys
+            return Pair{Symbol,Any}[kw => true]
+        end
+        error("""
+            Bad argument: $(repr(kw))
+            A bare symbol must either name a flag or a `NamedTuple` binding
+            in the calling module. Got neither.
+            Allowed flags: $(collect(allowed_keys))
+        """)
     end
     if Meta.isexpr(kw, Symbol("="))
         length(kw.args) == 2 || error_parse_macro_kw(kw)
