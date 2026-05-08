@@ -145,9 +145,11 @@ struct SBare; a; b; end
     if VERSION >= v"1.8"
         @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
-        # Bare symbol is now sugar for `=true`, so an unknown bare flag fails
-        # as an unsupported keyword rather than as a parse error.
-        @test_throws "Unsupported keyword" @macroexpand @batteries SErrors nonsense
+        # Bare symbol naming a known flag is sugar for `=true`. A bare
+        # symbol that is *not* a known flag falls through to the
+        # NamedTuple-config path; if it isn't bound to anything either,
+        # we report "Bad argument" with the failed evaluation.
+        @test_throws "Bad argument" @macroexpand @batteries SErrors nonsense
     else
         @test_throws Exception @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws Exception @macroexpand @batteries SErrors kwconstructor=true nonsense=true
@@ -293,8 +295,101 @@ struct BatNothing; a; end
 
     # `@battery` rejects unknown keywords just like `@batteries`.
     if VERSION >= v"1.8"
-        @test_throws "Unsupported keyword" @macroexpand @battery BatNothing nonsense
+        # Bare symbol that is neither a flag nor bound to a NamedTuple
+        # triggers the config-eval path and reports a "Bad argument"
+        # error with the underlying UndefVarError.
+        @test_throws "Bad argument" @macroexpand @battery BatNothing nonsense
         @test_throws "Bad keyword argument value" @macroexpand @battery BatNothing kwshow="true"
+    end
+end
+
+# `NamedTuple`-config splatting: any macro argument that is neither a
+# flag nor `name=value` is evaluated in the calling module and its
+# `pairs(...)` are spliced in. Later args override earlier ones.
+const config_kwshow_kwconst    = (kwshow=true, kwconstructor=true)
+const config_with_typesalt     = (kwshow=true, kwconstructor=true, typesalt=0x42)
+const config_no_kwconstructor  = (kwconstructor=false,)
+
+# 1. Single config splat into `@batteries`. The defaults still apply for
+#    keys not in the config; the config wins for keys it sets.
+struct CfgA; a; b; end
+@batteries CfgA config_kwshow_kwconst
+
+# 2. Config + per-struct override: explicit `typesalt=...` wins over
+#    whatever the config says (and over the default).
+struct CfgB; a; b; end
+@batteries CfgB config_with_typesalt typesalt=0x99
+
+# 3. Two configs combined; later overrides earlier.
+struct CfgC; a; b; end
+@batteries CfgC config_kwshow_kwconst config_no_kwconstructor
+
+# 4. Inline NamedTuple literal (no const required).
+struct CfgD; a; b; end
+@batteries CfgD (kwshow=true, kwconstructor=true)
+
+# 5. `@battery` (opt-in form) plus a config: only the config's batteries
+#    are derived, nothing else.
+struct CfgE; a; b; end
+@battery CfgE config_kwshow_kwconst
+
+# 6. `@battery` plus a config plus a bare-flag override.
+struct CfgF; a; end
+@battery CfgF config_kwshow_kwconst eq
+
+@testset "NamedTuple config splat" begin
+    # The behavior of every individual flag (kwshow, kwconstructor, ==,
+    # isequal, hash, typesalt, ...) is already exercised exhaustively
+    # by the @batteries / @battery testsets above. The job of *this*
+    # testset is to verify that the splatting machinery sets exactly
+    # the flags the user asked for and nothing else, regardless of
+    # whether they came from a const config, an inline NamedTuple
+    # literal, multiple configs, or a config + override.
+    has_method(f, sig) = any(m -> m.sig === Tuple{typeof(f), sig...}, methods(f, sig))
+
+    # 1. `@batteries` + config: config-set flags ON, untouched flags
+    #    keep their (mostly-on) defaults.
+    @test  has_method(==,      (CfgA, CfgA))   # default
+    @test  has_method(isequal, (CfgA, CfgA))   # default
+    @test  has_method(hash,    (CfgA, UInt))   # default
+
+    # 2. Per-struct override wins over the config it follows. typesalt
+    #    is the only flag whose value can be observed without method
+    #    introspection, hence the explicit hash check.
+    h = UInt(0)
+    @test hash(CfgB(7, 8), h) === hash((7, 8), hash(0x99, h))
+    @test hash(CfgB(7, 8), h) !== hash((7, 8), hash(0x42, h))
+
+    # 3. Two-config last-write-wins: the second config's
+    #    `kwconstructor=false` undoes the first config's `=true`.
+    @test_throws MethodError CfgC(a=1, b=2)
+
+    # 4. Inline NamedTuple literal: same effect as a const config.
+    @test has_method(==, (CfgD, CfgD))
+    @test CfgD(a=1, b=2) === CfgD(1, 2)        # kwconstructor reached us
+
+    # 5. `@battery` + config: only the config's flags are set; defaults
+    #    are NOT pulled in (this is what distinguishes the two macros).
+    @test !has_method(==,      (CfgE, CfgE))
+    @test !has_method(isequal, (CfgE, CfgE))
+    @test !has_method(hash,    (CfgE, UInt))
+
+    # 6. `@battery` + config + bare-flag override: bare `eq` adds `==`
+    #    on top of the config; isequal/hash still absent.
+    @test  has_method(==,      (CfgF, CfgF))
+    @test !has_method(isequal, (CfgF, CfgF))
+    @test !has_method(hash,    (CfgF, UInt))
+
+    @testset "errors" begin
+        if VERSION >= v"1.8"
+            # Bare symbol that's neither a flag nor a binding.
+            @test_throws "Bad argument" @macroexpand @batteries CfgA undefined_config
+            # Bound but not a NamedTuple.
+            global not_a_namedtuple = 42
+            @test_throws "Bad argument" @macroexpand(@batteries CfgA not_a_namedtuple)
+            # Inline non-NamedTuple expression.
+            @test_throws "Bad argument" @macroexpand @batteries CfgA 1 + 2
+        end
     end
 end
 

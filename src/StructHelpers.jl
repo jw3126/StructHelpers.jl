@@ -235,10 +235,29 @@ struct S
 end
 
 @batteries S
-@batteries S hash=false # don't overload `Base.hash`
+@batteries S hash=false         # don't overload `Base.hash`
 @batteries S kwconstructor=true # add a keyword constructor
 @batteries S kwconstructor      # bare symbol is shorthand for `kwconstructor=true`
 ```
+
+# Reusing options across many structs
+
+Each `option` argument can also be an expression that evaluates to a
+`NamedTuple`; its fields are spliced into the keyword list. This lets
+you share a configuration across many types:
+
+```julia
+const config = (kwshow=true, kwconstructor=true, eq=false)
+
+@batteries S1 config
+@batteries S2 config typesalt=0xdeadbeef   # override `typesalt` only
+@batteries S3 (kwshow=true, eq=false)      # inline NamedTuple literal
+```
+
+Later arguments override earlier ones (last-write-wins), so explicit
+overrides after a config splat behave as expected. The bare-flag
+shorthand is reserved for call sites and not stored in `NamedTuple`s
+— spell config entries as `flag = true`.
 
 Supported options and defaults are:
 
@@ -272,6 +291,15 @@ end
 @battery S hash typesalt=0xab  # only define hash, with stable typesalt
 ```
 
+`@battery` accepts the same `NamedTuple` config splatting as
+[`@batteries`](@ref):
+
+```julia
+const minimal = (kwshow=true, kwconstructor=true)
+@battery T minimal             # only the two batteries in `minimal`
+@battery T minimal eq=true     # the two from `minimal` plus structural ==
+```
+
 Supported options are the same as for [`@batteries`](@ref); only the
 defaults differ (every Bool defaults to `false`, `typesalt` to `nothing`).
 """
@@ -284,7 +312,7 @@ end
 # (everything off). The same validation and emission logic is used in both
 # cases.
 function def_batteries(__module__, T, kw, base)
-    nt = parse_all_macro_kw(kw)
+    nt = parse_all_macro_kw(kw, __module__, propertynames(BATTERIES_DEFAULTS))
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(BATTERIES_DEFAULTS))
             error("""
@@ -404,31 +432,55 @@ function error_parse_macro_kw(kw; comment=nothing)
     end
     error(msg)
 end
-function parse_single_macro_kw(kw)
-    # Bare-symbol shorthand: `flag` is sugar for `flag=true`. Lets users write
-    # `@batteries T kwconstructor` instead of `@batteries T kwconstructor=true`.
-    # The resulting `flag => true` is then validated by the macro itself, so
-    # bare symbols that don't name a Bool option (e.g. `typesalt`) still
-    # produce the standard "Bad keyword argument value" error.
-    kw isa Symbol && return (kw => true)
-    Meta.isexpr(kw, Symbol("=")) || error_parse_macro_kw(kw)
-    length(kw.args) == 2 || error_parse_macro_kw(kw)
-    key, val = kw.args
-    key isa Symbol || error_parse_macro_kw(kw, comment="key = $key must be a symbol")
-    (key => val)
-end
-function parse_all_macro_kw(kw)
-    pairs =  map(parse_single_macro_kw, kw)
-    if !(allunique(map(first, pairs)))
-        error(
-            """
-            Keywords must be unique. Got:
-            $(kw)
-            """
-        )
+
+# Evaluate `expr` in `__module__` and return its `pairs(...)` as a
+# `Vector{Pair{Symbol,Any}}`. Used to splat a config-style binding or
+# an inline `(a=1, b=2)` literal into the macro's keyword stream. Errors
+# with a clear message if evaluation fails or the result isn't a
+# `NamedTuple`.
+function eval_namedtuple_arg(expr, __module__)
+    bad(reason) = error("""
+        Bad argument: $(repr(expr))
+        Expected a flag, `name = value`, or an expression evaluating to a `NamedTuple`.
+        $reason
+    """)
+    val = try
+        Base.eval(__module__, expr)
+    catch e
+        bad("Evaluation failed:\n$(sprint(showerror, e))")
     end
-    (;pairs...)
+    val isa NamedTuple || bad("Got: $(repr(val))::$(typeof(val))")
+    return Pair{Symbol,Any}[k => v for (k, v) in pairs(val)]
 end
+
+function parse_single_macro_kw(kw, __module__, allowed_keys)
+    # Bare-symbol shorthand: `flag` is sugar for `flag=true`. Lets users
+    # write `@batteries T kwconstructor` instead of
+    # `@batteries T kwconstructor=true`. Only symbols naming an actual
+    # flag are treated as such; other bare symbols are evaluated as
+    # NamedTuple-valued bindings (config-style) and splatted.
+    if kw isa Symbol
+        return kw in allowed_keys ? Pair{Symbol,Any}[kw => true] :
+                                    eval_namedtuple_arg(kw, __module__)
+    end
+    if Meta.isexpr(kw, Symbol("="))
+        length(kw.args) == 2 || error_parse_macro_kw(kw)
+        key, val = kw.args
+        key isa Symbol || error_parse_macro_kw(kw, comment="key = $key must be a symbol")
+        return Pair{Symbol,Any}[key => val]
+    end
+    # Anything else: try to evaluate as a NamedTuple-valued expression.
+    # This supports inline literals like `(kwshow=true, eq=false)` and
+    # arbitrary expressions that resolve to a NamedTuple.
+    return eval_namedtuple_arg(kw, __module__)
+end
+
+# Fold all macro arguments into a single NamedTuple. Later arguments
+# override earlier ones (last-write-wins, courtesy of NamedTuple
+# construction), so the common pattern `@batteries S config typesalt=0xab`
+# cleanly extends a config with explicit overrides.
+parse_all_macro_kw(kw, __module__, allowed_keys) =
+    (; (p for k in kw for p in parse_single_macro_kw(k, __module__, allowed_keys))...)
 
 ################################################################################
 #### enum
@@ -587,6 +639,15 @@ Automatically derive several methods for Enum type `T`.
 @enumbatteries Color symbol_conversion      # bare symbol is shorthand for `symbol_conversion=true`
 ```
 
+Like [`@batteries`](@ref), arguments may also be `NamedTuple`-valued
+expressions whose fields are spliced in (config-style):
+
+```julia
+const enum_config = (string_conversion=true, symbol_conversion=true)
+@enumbatteries Color enum_config
+@enumbatteries Color enum_config hash=false  # override
+```
+
 Supported options and defaults are:
 
 $(doc_enum_batteries_options())
@@ -624,7 +685,7 @@ end
 # `ENUM_BATTERIES_NONE` (everything off, except the always-on
 # `enum_from_*` / `*_from_enum` methods).
 function def_enumbatteries(__module__, T, kw, base)
-    nt = parse_all_macro_kw(kw)
+    nt = parse_all_macro_kw(kw, __module__, propertynames(ENUM_BATTERIES_DEFAULTS))
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(ENUM_BATTERIES_DEFAULTS))
             error("""
