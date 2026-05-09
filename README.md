@@ -77,6 +77,34 @@ For all supported options and defaults, consult the docstring:
 julia>?@batteries
 ```
 
+## `kwshow` vs `showrepr`
+
+Two options overload `Base.show`; pick at most one (passing both is an
+error):
+
+* `kwshow=true` always renders `T(f1 = v1, f2 = v2, …)` — every field,
+  named, in declaration order. The output shape is fixed and stable
+  across versions, which makes it well-suited to diagnostics and
+  golden-file tests. It round-trips through `eval` only when the type
+  has a keyword constructor (e.g. via `kwconstructor=true` or
+  `Base.@kwdef`).
+
+* `showrepr=true` prints a heuristically short constructor call that
+  recreates the object. It probes every constructor of the type
+  (positional, keyword, hybrid), omits trailing fields that already
+  match a default, and substitutes shorter literals where the
+  constructor still accepts them (e.g. `0x2a` → `42`, `2//1` → `2`,
+  uniform vectors → `fill(v, n)`). Because the result depends on the
+  field values and on the package's heuristics, the exact output is
+  *not* guaranteed to be stable across minor releases — don't pin
+  golden files against it. If no constructor recreates the object,
+  `showrepr` falls back to a non-executable `T(field = value, …)`
+  rendering.
+
+Rule of thumb: pick `kwshow` if you want a predictable, name-every-field
+diagnostic; pick `showrepr` if you want `Base.show` to produce an
+idiomatic, recreatable, as-short-as-reasonable form for end users.
+
 # Alternatives
 
 * [AutoHashEquals](https://github.com/andrewcooke/AutoHashEquals.jl) requires annotating the struct definition. This can be inconvenient if you want to annotate the definition with another macro as well.
