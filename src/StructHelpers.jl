@@ -192,30 +192,30 @@ macro batteries(T, kw...)
         push!(ret.args, :(import StructTypes as $ST))
     end
     if nt.hash
-        def = :(function $(GlobalRef(Base, :hash))(o::$T, h::$UInt)
+        def = :(function $(Base).hash(o::$T, h::$UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
             proxy = ($hash_eq_as)(o)
-            $(Base.hash)(proxy, h)
+            $(Base).hash(proxy, h)
         end
         )
         push!(ret.args, def)
     end
     if nt.eq
-        def = :(function $(GlobalRef(Base, :(==)))(o1::$T, o2::$T)
+        def = :(function $(Base).:(==)(o1::$T, o2::$T)
             ($hash_eq_as)(o1) == ($hash_eq_as)(o2)
         end
         )
         push!(ret.args, def)
     end
     if nt.isequal
-        def = :(function $(GlobalRef(Base, :isequal))(o1::$T, o2::$T)
-            $(Base.isequal)($hash_eq_as(o1), $hash_eq_as(o2))
+        def = :(function $(Base).isequal(o1::$T, o2::$T)
+            $(Base).isequal($hash_eq_as(o1), $hash_eq_as(o2))
         end
         )
         push!(ret.args, def)
     end
     if nt.kwshow
-        def = :($(GlobalRef(Base, :show))(io::$IO, o::$T) = $(kwshow)(io, o))
+        def = :($(Base).show(io::$IO, o::$T) = $(kwshow)(io, o))
         push!(ret.args, def)
     end
     if nt.getproperties
@@ -482,17 +482,17 @@ macro enumbatteries(T, kw...)
     push!(ret.args, def_symbol_from_enum(TT))
     push!(ret.args, def_string_from_enum(TT))
     if nt.string_conversion
-        ex1 = :($(GlobalRef(Base, :convert))(::$Type{$TT}, s::$AbstractString) = $SH.enum_from_string($TT, $String(s)))
+        ex1 = :($(Base).convert(::$Type{$TT}, s::$AbstractString) = $SH.enum_from_string($TT, $String(s)))
         ex2 = :($T(s::$AbstractString) = $SH.enum_from_string($TT, $String(s)))
-        ex3 = :($(GlobalRef(Base, :convert))(::$Type{$String}, x::$T) = $SH.string_from_enum(x))
-        ex4 = :($(GlobalRef(Base, :String))(x::$T) = $SH.string_from_enum(x))
+        ex3 = :($(Base).convert(::$Type{$String}, x::$T) = $SH.string_from_enum(x))
+        ex4 = :($(Base).String(x::$T) = $SH.string_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
     if nt.symbol_conversion
-        ex1 = :($(GlobalRef(Base, :convert))(::$Type{$T}, s::$Symbol) = $SH.enum_from_symbol($TT, $Symbol(s)))
+        ex1 = :($(Base).convert(::$Type{$T}, s::$Symbol) = $SH.enum_from_symbol($TT, $Symbol(s)))
         ex2 = :($T(s::$Symbol) = $SH.enum_from_symbol($TT, $Symbol(s)))
-        ex3 = :($(GlobalRef(Base, :convert))(::$Type{$Symbol}, x::$T) = $SH.symbol_from_enum(x))
-        ex4 = :($(GlobalRef(Base, :Symbol))(x::$T) = $SH.symbol_from_enum(x))
+        ex3 = :($(Base).convert(::$Type{$Symbol}, x::$T) = $SH.symbol_from_enum(x))
+        ex4 = :($(Base).Symbol(x::$T) = $SH.symbol_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
     if nt.selfconstructor
@@ -500,9 +500,9 @@ macro enumbatteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.hash
-        def = :(function $(GlobalRef(Base, :hash))(o::$T, h::$UInt)
+        def = :(function $(Base).hash(o::$T, h::$UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
-            $(Base.hash)($Integer(o), h)
+            $(Base).hash($Integer(o), h)
         end
         )
         push!(ret.args, def)
