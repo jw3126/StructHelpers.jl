@@ -315,10 +315,16 @@ module ShadowedCore
     using StructHelpers
     using Test
 
-    # Shadow every Core / Base name @batteries / @enumbatteries reach for.
-    # Each one is the bogus binding (anything will do — what matters is
-    # that the symbol is *not* its Core / Base meaning at macro-expansion
-    # time).
+    # Shadow every Core / Base name `@batteries` / `@enumbatteries`
+    # reach for. Most of these are bogus String constants — what
+    # matters is that the symbol is *not* its Core / Base meaning at
+    # macro-expansion time. `Base` and `Core` themselves are shadowed
+    # by user-defined empty structs, which is the most aggressive case
+    # (any `Base.foo` / `Core.foo` reference in a quoted AST that
+    # `esc`s into this module would now hit our struct, not the
+    # standard library module).
+    struct Base end
+    struct Core end
     const Type = "shadowed-Type"
     const Any  = "shadowed-Any"
     const Bool = "shadowed-Bool"
@@ -327,6 +333,7 @@ module ShadowedCore
     const Symbol          = "shadowed-Symbol"
     const AbstractString  = "shadowed-AbstractString"
     const Integer         = "shadowed-Integer"
+    const IO              = "shadowed-IO"
 
     # Struct decorated with the most demanding option set (all the
     # quoted ASTs reachable: hash, eq, isequal, kwshow, getproperties,
@@ -352,11 +359,17 @@ module ShadowedCore
         @test (Strenuous(; a=3, b=4)).a == 3
         @test StructHelpers.constructorof(Strenuous) === Strenuous
 
-        # Enum decorations all worked.
+        # Enum decorations all worked. Note: `Base` is itself
+        # shadowed inside this module, so we call generic functions by
+        # the unqualified names (which Julia's implicit `using Base`
+        # has imported into scope independently of the `Base` binding
+        # we redefined). The shadowing test is exactly that those
+        # bare names don't go through `Base.X` lookup at the call
+        # site of the macro-emitted methods.
         @test StructHelpers.has_batteries(Color)
-        @test Base.convert(Color, "RED") === RED
+        @test convert(Color, "RED") === RED
         @test Color(:GREEN) === GREEN
-        @test Base.convert(Base.String, BLUE) == "BLUE"
-        @test Base.Symbol(RED) === :RED
+        @test convert(Main.Base.String, BLUE) == "BLUE"
+        @test Main.Base.Symbol(RED) === :RED
     end
 end
