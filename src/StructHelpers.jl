@@ -416,14 +416,18 @@ function compact(v::AbstractVector)
     cp === nothing && return nothing
     pieces, kind = cp
     Tc = constructorof(typeof(v))
-    # Vararg-from-elements? E.g. `SVector{4}(1, 2, 3, 4)`, `Tuple(...)`. If
-    # so, prefer `Tc(...)` so the printed form preserves the concrete type
-    # (notably the static size of `SVector`). `Vector`'s constructor rejects
-    # this signature, so we fall back to a bracket literal there.
-    str = if hasmethod(Tc, NTuple{length(v),Any})
-        kind === :uniform ? "$Tc($pieces...)" : "$Tc($pieces)"
-    else
-        kind === :uniform ? pieces : "[$pieces]"
+    # Prefer `Tc(elems...)` so the printed form preserves the concrete type
+    # (notably `SVector`'s static size). Fall back to a bracket literal when
+    # the wrapped form doesn't round-trip — `Vector` rejects the signature,
+    # and on Julia 1.6 `constructorof(SVector{N,T}) === SArray` throws
+    # `DimensionMismatch` since size can't be inferred from positional args.
+    fallback, wrapped = kind === :uniform ?
+        (pieces,     "$Tc($pieces...)") :
+        ("[$pieces]", "$Tc($pieces)")
+    str = try
+        repr_eq(Tc(v...), v) ? wrapped : fallback
+    catch
+        fallback
     end
     length(str) < length(repr(v)) || return nothing
     return (str, collect(v))

@@ -746,13 +746,20 @@ end
 @batteries SStaticVecField showrepr=true
 
 @testset "showrepr static-vector fill compression" begin
-    # Uniform → splat into the static constructor.
-    @test sprint(show, SStaticVecField(SVector(ntuple(_->0, Val(16))...))) ==
-          "SStaticVecField(SVector(fill(0, 16)...))"
-    # Mixed leading element + uniform tail.
-    @test sprint(show, SStaticVecField(SVector(ntuple(i->i==1 ? 7 : 0, Val(16))...))) ==
-          "SStaticVecField(SVector(7, fill(0, 15)...))"
-    # Round-trip the compressed forms.
+    # On Julia 1.6, `constructorof(SVector{N,T}) === SArray` and
+    # `SArray(args...)` throws `DimensionMismatch`. `compact` then falls
+    # back to a bracket literal, which the field's `convert` accepts —
+    # round-trip works on all versions, but the printed name differs, so
+    # the string-shape assertions below are gated on Julia >= 1.7.
+    if VERSION >= v"1.7"
+        # Uniform → splat into the static constructor.
+        @test sprint(show, SStaticVecField(SVector(ntuple(_->0, Val(16))...))) ==
+              "SStaticVecField(SVector(fill(0, 16)...))"
+        # Mixed leading element + uniform tail.
+        @test sprint(show, SStaticVecField(SVector(ntuple(i->i==1 ? 7 : 0, Val(16))...))) ==
+              "SStaticVecField(SVector(7, fill(0, 15)...))"
+    end
+    # Round-trip the compressed forms (works on all versions).
     for v in (SVector(ntuple(_->0, Val(16))...),
               SVector(ntuple(i->i==1 ? 7 : 0, Val(16))...))
         o = SStaticVecField(v)
@@ -760,8 +767,8 @@ end
     end
     # When the bracket literal is genuinely shorter than the wrapped form
     # (small array, small elements), `compact` rejects the wrapping and
-    # falls back to plain `show` — the field type still coerces, so this
-    # round-trips even though no `SVector(...)` appears.
+    # falls back to plain `show` — the field's `convert` still accepts a
+    # `Vector`, so this round-trips even though no `SVector(...)` appears.
     @test sprint(show, SStaticVecField(SVector(1, 2, 3, 4, 5, 6, 7, 8,
                                                 9,10,11,12,13,14,15,16))) ==
           "SStaticVecField([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])"
