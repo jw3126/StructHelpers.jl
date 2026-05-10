@@ -49,6 +49,51 @@ struct WithSelfCtor; a; end
 struct SNoIsEqual; a; end
 @batteries SNoIsEqual isequal=false
 
+struct WithDefaults
+    a
+    b
+    c
+end
+@batteries WithDefaults kwconstructor=true kwshow=true
+function SH.default_keywords(::Type{WithDefaults})
+    (a = 1, b = 2)
+end
+
+struct AllDefaults
+    a
+    b
+end
+@batteries AllDefaults kwconstructor=true kwshow=true
+function SH.default_keywords(::Type{AllDefaults})
+    (a = 1, b = 2)
+end
+
+struct NoDefaultsKw
+    a
+    b
+end
+@batteries NoDefaultsKw kwconstructor=true kwshow=true
+
+struct WithNaNDefault
+    x
+end
+@batteries WithNaNDefault kwshow=true kwconstructor=true
+function SH.default_keywords(::Type{WithNaNDefault})
+    (x = NaN,)
+end
+
+struct CountedDefaults
+    a
+    b
+    c
+end
+@batteries CountedDefaults kwconstructor=true
+const COUNTED_DEFAULTS_CALLS = Ref(0)
+function SH.default_keywords(::Type{CountedDefaults})
+    COUNTED_DEFAULTS_CALLS[] += 1
+    (a = 1, b = 2)
+end
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -132,6 +177,60 @@ struct SNoIsEqual; a; end
     @test NoSelfCtor(NoSelfCtor(1)) != NoSelfCtor(1)
     @test NoSelfCtor(NoSelfCtor(1)) isa NoSelfCtor
     @test NoSelfCtor(NoSelfCtor(1)).a === NoSelfCtor(1)
+end
+
+@testset "default_keywords" begin
+    @test SH.default_keywords(SBatteries) === NamedTuple()
+    @test SH.default_keywords(WithDefaults) === (a = 1, b = 2)
+
+    # kwconstructor uses defaults from default_keywords
+    @test WithDefaults(c = 3) === WithDefaults(1, 2, 3)
+    @test WithDefaults(a = 10, c = 3) === WithDefaults(10, 2, 3)
+    @test WithDefaults(a = 10, b = 20, c = 30) === WithDefaults(10, 20, 30)
+    # fields without a default are still required
+    @test_throws UndefKeywordError WithDefaults()
+    @test_throws UndefKeywordError WithDefaults(a = 10)
+
+    # all-defaults type can be constructed with no kwargs
+    @test AllDefaults() === AllDefaults(1, 2)
+    @test AllDefaults(a = 10) === AllDefaults(10, 2)
+
+    # kwconstructor with no default_keywords overload still requires every field
+    @test NoDefaultsKw(a = 1, b = 2) === NoDefaultsKw(1, 2)
+    @test_throws UndefKeywordError NoDefaultsKw()
+    @test_throws UndefKeywordError NoDefaultsKw(a = 1)
+
+    # kwshow omits fields equal to their default
+    @test sprint(show, WithDefaults(1, 2, 3)) == "$(WithDefaults)(c = 3)"
+    @test sprint(show, WithDefaults(10, 2, 3)) == "$(WithDefaults)(a = 10, c = 3)"
+    @test sprint(show, WithDefaults(10, 20, 30)) == "$(WithDefaults)(a = 10, b = 20, c = 30)"
+    @test sprint(show, WithDefaults(1, 20, 3)) == "$(WithDefaults)(b = 20, c = 3)"
+
+    # all defaults match → empty argument list
+    @test sprint(show, AllDefaults(1, 2)) == "$(AllDefaults)()"
+    @test sprint(show, AllDefaults(10, 2)) == "$(AllDefaults)(a = 10)"
+
+    # without default_keywords overload, every field is shown
+    @test sprint(show, NoDefaultsKw(1, 2)) == "$(NoDefaultsKw)(a = 1, b = 2)"
+
+    # isequal semantics: isequal(NaN, NaN) is true, so the field is omitted
+    @test isequal(WithNaNDefault(), WithNaNDefault(NaN))
+    @test sprint(show, WithNaNDefault(NaN)) == "$(WithNaNDefault)()"
+    @test sprint(show, WithNaNDefault(1.0)) == "$(WithNaNDefault)(x = 1.0)"
+
+    # default_keywords is called exactly once per kwconstructor invocation,
+    # regardless of how many kwargs the caller supplied.
+    COUNTED_DEFAULTS_CALLS[] = 0
+    CountedDefaults(c = 3)
+    @test COUNTED_DEFAULTS_CALLS[] == 1
+
+    COUNTED_DEFAULTS_CALLS[] = 0
+    CountedDefaults(a = 10, c = 3)
+    @test COUNTED_DEFAULTS_CALLS[] == 1
+
+    COUNTED_DEFAULTS_CALLS[] = 0
+    CountedDefaults(a = 10, b = 20, c = 30)
+    @test COUNTED_DEFAULTS_CALLS[] == 1
 end
 
 @enum EnumNoBatteries UsesGas UsesPlug UsesMuscles
