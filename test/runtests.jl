@@ -304,3 +304,59 @@ import StructTypes as ST
     with = WithStructTypes(1,2)
     @test ST.StructType(typeof(with)) == ST.Struct()
 end
+
+# Regression test: every Core / Base name the macro touches in its
+# quoted ASTs (Type, Any, Bool, UInt, String, Symbol, AbstractString)
+# is captured by interpolation at the macro's *definition site*, so a
+# user module that has redefined those bindings to bogus values must
+# not derail macro expansion. Use a fresh module so the redefinitions
+# only live in this scope.
+module ShadowedCore
+    using StructHelpers
+    using Test
+
+    # Shadow every Core / Base name @batteries / @enumbatteries reach for.
+    # Each one is the bogus binding (anything will do — what matters is
+    # that the symbol is *not* its Core / Base meaning at macro-expansion
+    # time).
+    const Type = "shadowed-Type"
+    const Any  = "shadowed-Any"
+    const Bool = "shadowed-Bool"
+    const UInt = "shadowed-UInt"
+    const String          = "shadowed-String"
+    const Symbol          = "shadowed-Symbol"
+    const AbstractString  = "shadowed-AbstractString"
+    const Integer         = "shadowed-Integer"
+
+    # Struct decorated with the most demanding option set (all the
+    # quoted ASTs reachable: hash, eq, isequal, kwshow, getproperties,
+    # constructorof, kwconstructor, selfconstructor, StructTypes).
+    struct Strenuous
+        a::Int
+        b::Int
+    end
+    @batteries Strenuous eq=true hash=true isequal=true kwshow=true getproperties=true constructorof=true kwconstructor=true selfconstructor=true StructTypes=true typesalt=0xdeadbeef
+
+    # Enum decorated with both string + symbol conversion paths so the
+    # convert(::Type{...}, ::AbstractString) / Symbol forms also expand.
+    @enum Color RED=0 GREEN=1 BLUE=2
+    @enumbatteries Color string_conversion=true symbol_conversion=true hash=true typesalt=0xc0ffee
+
+    @testset "macro is immune to user-side Core/Base shadowing" begin
+        # Struct decorations all worked.
+        s = Strenuous(1, 2)
+        @test StructHelpers.has_batteries(Strenuous)
+        @test s == Strenuous(1, 2)
+        @test isequal(s, Strenuous(1, 2))
+        @test hash(s) == hash(Strenuous(1, 2))
+        @test (Strenuous(; a=3, b=4)).a == 3
+        @test StructHelpers.constructorof(Strenuous) === Strenuous
+
+        # Enum decorations all worked.
+        @test StructHelpers.has_batteries(Color)
+        @test Base.convert(Color, "RED") === RED
+        @test Color(:GREEN) === GREEN
+        @test Base.convert(Base.String, BLUE) == "BLUE"
+        @test Base.Symbol(RED) === :RED
+    end
+end

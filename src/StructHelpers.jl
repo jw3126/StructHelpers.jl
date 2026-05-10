@@ -192,7 +192,7 @@ macro batteries(T, kw...)
         push!(ret.args, :(import StructTypes as $ST))
     end
     if nt.hash
-        def = :(function Base.hash(o::$T, h::UInt)
+        def = :(function Base.hash(o::$T, h::$UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
             proxy = ($hash_eq_as)(o)
             Base.hash(proxy, h)
@@ -223,7 +223,7 @@ macro batteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.constructorof
-        def = :($SH.constructorof(::Type{<:$T}) = $T)
+        def = :($SH.constructorof(::$Type{<:$T}) = $T)
         push!(ret.args, def)
     end
     if nt.kwconstructor
@@ -235,16 +235,22 @@ macro batteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.StructTypes
-        def = :($ST.StructType(::Type{<:$T}) = $ST.Struct())
+        def = :($ST.StructType(::$Type{<:$T}) = $ST.Struct())
         push!(ret.args, def)
     end
     push!(ret.args, def_has_batteries(T))
     return esc(ret)
 end
 
+# `$Type` (and friends below) interpolate the actual Core.Type value
+# at quote-build time so it ends up as a literal in the resulting AST.
+# That immunizes the macro against a user module that has redefined
+# `Type`, `Any`, `Bool`, `UInt`, `String`, `Symbol`, or
+# `AbstractString` to something else (which is exactly what happens
+# when a user struct is itself named `Type` or `Any`).
 function def_has_batteries(T)
     :(
-        function $(SH).has_batteries(::Type{<:$T})::Bool
+        function $(SH).has_batteries(::$Type{<:$T})::$Bool
             true
         end
     )
@@ -331,7 +337,7 @@ end
 function def_enum_from_string(T)::Expr
     body = def_enum_from_string_or_symbol_body(string_from_enum, T)
     :(
-      function $SH.enum_from_string(::Type{$T}, s::String)::$T
+      function $SH.enum_from_string(::$Type{$T}, s::$String)::$T
           $body
       end
      )
@@ -339,7 +345,7 @@ end
 function def_enum_from_symbol(T)::Expr
     body = def_enum_from_string_or_symbol_body(QuoteNode∘symbol_from_enum, T)
     :(
-      function $SH.enum_from_symbol(::Type{$T}, s::Symbol)::$T
+      function $SH.enum_from_symbol(::$Type{$T}, s::$Symbol)::$T
           $body
       end
      )
@@ -366,7 +372,7 @@ end
 function def_symbol_from_enum(T)::Expr
     body = def_symbol_or_string_from_enum_body(symbol_from_enum_generic, T)
     :(
-      function $SH.symbol_from_enum(obj::$T)::Symbol
+      function $SH.symbol_from_enum(obj::$T)::$Symbol
           $body
       end
      )
@@ -375,7 +381,7 @@ end
 function def_string_from_enum(T)::Expr
     body = def_symbol_or_string_from_enum_body(string_from_enum_generic, T)
     :(
-      function $SH.string_from_enum(obj::$T)::String
+      function $SH.string_from_enum(obj::$T)::$String
           $body
       end
      )
@@ -476,16 +482,16 @@ macro enumbatteries(T, kw...)
     push!(ret.args, def_symbol_from_enum(TT))
     push!(ret.args, def_string_from_enum(TT))
     if nt.string_conversion
-        ex1 = :(Base.convert(::Type{$TT}, s::AbstractString) = $SH.enum_from_string($TT, String(s)))
-        ex2 = :($T(s::AbstractString) = $SH.enum_from_string($TT, String(s)))
-        ex3 = :(Base.convert(::Type{String}, x::$T) = $SH.string_from_enum(x))
+        ex1 = :(Base.convert(::$Type{$TT}, s::$AbstractString) = $SH.enum_from_string($TT, $String(s)))
+        ex2 = :($T(s::$AbstractString) = $SH.enum_from_string($TT, $String(s)))
+        ex3 = :(Base.convert(::$Type{$String}, x::$T) = $SH.string_from_enum(x))
         ex4 = :(Base.String(x::$T) = $SH.string_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
     if nt.symbol_conversion
-        ex1 = :(Base.convert(::Type{$T}, s::Symbol) = $SH.enum_from_symbol($TT, Symbol(s)))
-        ex2 = :($T(s::Symbol) = $SH.enum_from_symbol($TT, Symbol(s)))
-        ex3 = :(Base.convert(::Type{Symbol}, x::$T) = $SH.symbol_from_enum(x))
+        ex1 = :(Base.convert(::$Type{$T}, s::$Symbol) = $SH.enum_from_symbol($TT, $Symbol(s)))
+        ex2 = :($T(s::$Symbol) = $SH.enum_from_symbol($TT, $Symbol(s)))
+        ex3 = :(Base.convert(::$Type{$Symbol}, x::$T) = $SH.symbol_from_enum(x))
         ex4 = :(Base.Symbol(x::$T) = $SH.symbol_from_enum(x))
         push!(ret.args, ex1, ex2, ex3, ex4)
     end
@@ -494,9 +500,9 @@ macro enumbatteries(T, kw...)
         push!(ret.args, def)
     end
     if nt.hash
-        def = :(function Base.hash(o::$T, h::UInt)
+        def = :(function Base.hash(o::$T, h::$UInt)
             h = ($start_hash)(o, h, $(nt.typesalt))
-            Base.hash(Integer(o), h)
+            Base.hash($Integer(o), h)
         end
         )
         push!(ret.args, def)
