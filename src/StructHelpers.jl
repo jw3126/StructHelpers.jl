@@ -5,9 +5,14 @@ export @enumbatteries
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
-# Module aliases used in macro instead of gensyms
-# if we would use gensym, this would confuse Revise
-const SH = Symbol("#StructHelpers0x6b71ed784697c19c") # a gensym causes Revise.jl issues
+# `$SH.foo` in macro emissions interpolates the StructHelpers module value
+# directly into the generated AST. This resolves via `getproperty` at the
+# call site without requiring `import StructHelpers` (or any caller-side
+# binding) — callers only need a package that re-exports through to here.
+# `ST` is still a stable Symbol because the StructTypes module isn't
+# loaded eagerly; the `string_conversion` branch of `@enumbatteries` emits
+# `import StructTypes as $ST` and the caller must have StructTypes itself.
+const SH = @__MODULE__
 const ST = Symbol("#StructTypes0xcf319831da055023") # a gensym causes Revise.jl issues
 
 """
@@ -255,7 +260,6 @@ macro batteries(T, kw...)
     nt = merge(BATTERIES_DEFAULTS, nt)
     ret = quote end
 
-    push!(ret.args, :(import StructHelpers as $SH))
     need_fieldnames = nt.kwconstructor || nt.getproperties
     if need_fieldnames
         fieldnames = Base.fieldnames(Base.eval(__module__, T))
@@ -549,7 +553,6 @@ macro enumbatteries(T, kw...)
     TT = Base.eval(__module__, T)::Type
     ret = quote end
 
-    push!(ret.args, :(import StructHelpers as $SH))
     push!(ret.args, def_enum_from_symbol(TT))
     push!(ret.args, def_enum_from_string(TT))
     push!(ret.args, def_symbol_from_enum(TT))
