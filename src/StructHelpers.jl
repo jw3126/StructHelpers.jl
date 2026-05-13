@@ -159,6 +159,15 @@ function showrepr(io::IO, o)
     print(io, constructor_repr(o))
 end
 
+# Invoke `T(pos...; kws...)` with `@nospecialize`d `T`. Inference resolves
+# the call against abstract `::Type` rather than a concrete `Type{X}`, so
+# JET (e.g. `report_package` on a downstream package) does not flag
+# `Core.kwcall` as missing for types `X` whose constructors take no kwargs
+# — those calls are guarded at runtime by the surrounding `try/catch`.
+function invoke_ctor(@nospecialize(T::Type), pos_vals::Vector{Any}, kw_pairs)
+    T(pos_vals...; kw_pairs...)
+end
+
 """
     constructor_repr(o)::String
 
@@ -209,7 +218,11 @@ function constructor_repr(o)
         # `Base.kwarg_decl` is internal, but the only known way to
         # introspect a method's kwargs.
         kws = Base.kwarg_decl(m)
-        relevant_kws = kws ∩ fnames
+        # Explicit filter rather than `kws ∩ fnames`: for `Tuple` types
+        # `fieldnames(T)` returns integers, which makes `∩` dispatch to a
+        # JET-unstable path. The filter has a uniform `Vector{Symbol}`
+        # return type.
+        relevant_kws = Symbol[k for k in kws if k in fnames]
 
         # `keep_kws` is only ever rebound, so the alias is safe (no `copy`).
         keep_kws = relevant_kws
@@ -218,9 +231,10 @@ function constructor_repr(o)
         pos_vals = Any[getfield(o, i) for i in 1:np]
 
         # `T(...)` may legitimately throw (custom invariants, type errors,
-        # ...); treat any such candidate as a non-match.
+        # ...); treat any such candidate as a non-match. Routed through
+        # `invoke_ctor` so JET stays clean on types without a kwarg ctor.
         recreates(kws) = try
-            matches(T(pos_vals...; (k => getfield(o, k) for k in kws)...))
+            matches(invoke_ctor(T, pos_vals, (k => getfield(o, k) for k in kws)))
         catch
             false
         end
@@ -238,7 +252,7 @@ function constructor_repr(o)
         # accepting only when `T(...)` still recreates `o`.
         kw_vals = Dict{Symbol,Any}(k => getfield(o, k) for k in keep_kws)
         trycall() = try
-            matches(T(pos_vals...; (k => kw_vals[k] for k in keep_kws)...))
+            matches(invoke_ctor(T, pos_vals, (k => kw_vals[k] for k in keep_kws)))
         catch
             false
         end
