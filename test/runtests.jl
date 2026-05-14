@@ -441,7 +441,7 @@ struct CfgExplicit; a; end
         # explicitly as `flag = true`) to opt into the new flag.
         @test :kwconstructor in StructHelpers.BATTERIES_ALLOWED_KW
         # The NamedTuple binding was splatted ⇒ kwshow is on.
-        @test sprint(show, CfgShadow(1)) == "CfgShadow(a = 1,)"
+        @test sprint(show, CfgShadow(1)) == "CfgShadow(a = 1)"
         # The flag interpretation was *not* taken ⇒ no kw constructor.
         @test_throws MethodError CfgShadow(a = 1)
         # The explicit form still reaches the flag.
