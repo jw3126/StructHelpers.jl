@@ -1,7 +1,9 @@
 module StructHelpers
 
 export @batteries
+export @battery
 export @enumbatteries
+export @enumbattery
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
@@ -209,6 +211,16 @@ end
 
 const BATTERIES_ALLOWED_KW = keys(BATTERIES_DEFAULTS)
 
+# Same shape as `BATTERIES_DEFAULTS`, but with every Bool flipped to `false`
+# and `typesalt` left at `nothing`. Used as the base nametuple for the
+# `@battery` macro, where the user opts in to each desired battery
+# explicitly. Derived programmatically so it stays in sync if
+# `BATTERIES_DEFAULTS` ever gains a new option.
+const BATTERIES_NONE = (;
+    (k => (v isa Bool ? false : v) for (k, v) in pairs(BATTERIES_DEFAULTS))...
+)
+@assert keys(BATTERIES_NONE) == keys(BATTERIES_DEFAULTS)
+
 """
 
     @batteries T [options]
@@ -223,18 +235,95 @@ struct S
 end
 
 @batteries S
-@batteries S hash=false # don't overload `Base.hash`
+@batteries S hash=false         # don't overload `Base.hash`
 @batteries S kwconstructor=true # add a keyword constructor
+@batteries S kwconstructor      # bare symbol is shorthand for `kwconstructor=true`
 ```
+
+# Reusing options across many structs
+
+Each `option` argument can also be an expression that evaluates to a
+`NamedTuple`; its fields are spliced into the keyword list. This lets
+you share a configuration across many types:
+
+```julia
+const config = (kwshow=true, kwconstructor=true, eq=false)
+
+@batteries S1 config
+@batteries S2 config typesalt=0xdeadbeef   # override `typesalt` only
+@batteries S3 (kwshow=true, eq=false)      # inline NamedTuple literal
+```
+
+Later arguments override earlier ones (last-write-wins), so explicit
+overrides after a config splat behave as expected. The bare-flag
+shorthand is reserved for call sites and not stored in `NamedTuple`s
+— spell config entries as `flag = true`.
+
+## Bare-symbol resolution
+
+A bare symbol argument is resolved by checking the calling module
+*first*: if it names a `NamedTuple` binding, that binding is splatted;
+otherwise, if it names a flag, it is treated as `flag = true`. User
+bindings winning over flag names is deliberate, so adding new flags
+in future versions of `StructHelpers` cannot silently shadow a user's
+config binding that happens to share the new flag's name. To adopt a
+newly added flag with a colliding binding name, either rename the
+binding or spell the flag explicitly as `flag = true`.
 
 Supported options and defaults are:
 
 $(doc_batteries_options())
 
-See also [`hash_eq_as`](@ref)
+See also [`@battery`](@ref) for an opt-in variant that derives only the
+listed batteries instead of starting from the defaults, and
+[`hash_eq_as`](@ref).
 """
 macro batteries(T, kw...)
-    nt = parse_all_macro_kw(kw)
+    def_batteries(__module__, T, kw, BATTERIES_DEFAULTS) |> esc
+end
+
+"""
+
+    @battery T [options]
+
+Like [`@batteries`](@ref) but with every default flipped to `false`: only
+the batteries the user lists explicitly are derived. The bare-flag
+shorthand makes call sites read as a checklist of behaviors to install.
+
+# Example
+```julia
+struct S
+    a
+    b
+end
+
+@battery S kwconstructor       # only define the keyword constructor
+@battery S eq isequal hash     # only structural ==, isequal, hash
+@battery S hash typesalt=0xab  # only define hash, with stable typesalt
+```
+
+`@battery` accepts the same `NamedTuple` config splatting as
+[`@batteries`](@ref):
+
+```julia
+const minimal = (kwshow=true, kwconstructor=true)
+@battery T minimal             # only the two batteries in `minimal`
+@battery T minimal eq=true     # the two from `minimal` plus structural ==
+```
+
+Supported options are the same as for [`@batteries`](@ref); only the
+defaults differ (every Bool defaults to `false`, `typesalt` to `nothing`).
+"""
+macro battery(T, kw...)
+    def_batteries(__module__, T, kw, BATTERIES_NONE) |> esc
+end
+
+# Shared codegen for `@batteries` / `@battery`. The two macros differ only
+# in `base`: `BATTERIES_DEFAULTS` (most batteries on) vs `BATTERIES_NONE`
+# (everything off). The same validation and emission logic is used in both
+# cases.
+function def_batteries(__module__, T, kw, base)
+    nt = parse_all_macro_kw(kw, __module__, propertynames(BATTERIES_DEFAULTS))
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(BATTERIES_DEFAULTS))
             error("""
@@ -257,7 +346,7 @@ macro batteries(T, kw...)
             """)
         end
     end
-    nt = merge(BATTERIES_DEFAULTS, nt)
+    nt = merge(base, nt)
     ret = quote end
 
     need_fieldnames = nt.kwconstructor || nt.getproperties
@@ -316,7 +405,7 @@ macro batteries(T, kw...)
         push!(ret.args, def)
     end
     push!(ret.args, def_has_batteries(T))
-    return esc(ret)
+    return ret
 end
 
 # `$Type` (and friends below) interpolate the actual Core.Type value
@@ -354,25 +443,74 @@ function error_parse_macro_kw(kw; comment=nothing)
     end
     error(msg)
 end
-function parse_single_macro_kw(kw)
-    Meta.isexpr(kw, Symbol("=")) || error_parse_macro_kw(kw)
-    length(kw.args) == 2 || error_parse_macro_kw(kw)
-    key, val = kw.args
-    key isa Symbol || error_parse_macro_kw(kw, comment="key = $key must be a symbol")
-    (key => val)
-end
-function parse_all_macro_kw(kw)
-    pairs =  map(parse_single_macro_kw, kw)
-    if !(allunique(map(first, pairs)))
-        error(
-            """
-            Keywords must be unique. Got:
-            $(kw)
-            """
-        )
+
+# Evaluate `expr` in `__module__` and return its `pairs(...)` as a
+# `Vector{Pair{Symbol,Any}}`. Used to splat a config-style binding or
+# an inline `(a=1, b=2)` literal into the macro's keyword stream. Errors
+# with a clear message if evaluation fails or the result isn't a
+# `NamedTuple`.
+function eval_namedtuple_arg(expr, __module__)
+    bad(reason) = error("""
+        Bad argument: $(repr(expr))
+        Expected a flag, `name = value`, or an expression evaluating to a `NamedTuple`.
+        $reason
+    """)
+    val = try
+        Base.eval(__module__, expr)
+    catch e
+        bad("Evaluation failed:\n$(sprint(showerror, e))")
     end
-    (;pairs...)
+    val isa NamedTuple || bad("Got: $(repr(val))::$(typeof(val))")
+    return Pair{Symbol,Any}[k => v for (k, v) in pairs(val)]
 end
+
+function parse_single_macro_kw(kw, __module__, allowed_keys)
+    # Bare-symbol shorthand: `flag` is sugar for `flag=true`. Lets users
+    # write `@batteries T kwconstructor` instead of
+    # `@batteries T kwconstructor=true`. We resolve a bare symbol by
+    # checking the caller's module *first*: if it names a `NamedTuple`
+    # binding, we splat it as config; otherwise, if it names a flag, we
+    # treat it as `flag=true`. User bindings winning over flag names is
+    # deliberate — it means StructHelpers can add new flags in future
+    # versions without silently shadowing a user's config binding that
+    # happens to share the new flag's name. The user only needs to
+    # rename their binding (or spell the new flag as `flag=true`) to
+    # adopt the new option.
+    if kw isa Symbol
+        if isdefined(__module__, kw)
+            val = Base.eval(__module__, kw)
+            if val isa NamedTuple
+                return Pair{Symbol,Any}[k => v for (k, v) in pairs(val)]
+            end
+        end
+        if kw in allowed_keys
+            return Pair{Symbol,Any}[kw => true]
+        end
+        error("""
+            Bad argument: $(repr(kw))
+            A bare symbol must either name a flag or a `NamedTuple` binding
+            in the calling module. Got neither.
+            Allowed flags: $(collect(allowed_keys))
+        """)
+    end
+    if Meta.isexpr(kw, Symbol("="))
+        length(kw.args) == 2 || error_parse_macro_kw(kw)
+        key, val = kw.args
+        key isa Symbol || error_parse_macro_kw(kw, comment="key = $key must be a symbol")
+        return Pair{Symbol,Any}[key => val]
+    end
+    # Anything else: try to evaluate as a NamedTuple-valued expression.
+    # This supports inline literals like `(kwshow=true, eq=false)` and
+    # arbitrary expressions that resolve to a NamedTuple.
+    return eval_namedtuple_arg(kw, __module__)
+end
+
+# Fold all macro arguments into a single NamedTuple. Later arguments
+# override earlier ones (last-write-wins, courtesy of NamedTuple
+# construction), so the common pattern `@batteries S config typesalt=0xab`
+# cleanly extends a config with explicit overrides.
+parse_all_macro_kw(kw, __module__, allowed_keys) =
+    (; (p for k in kw for p in parse_single_macro_kw(k, __module__, allowed_keys))...)
 
 ################################################################################
 #### enum
@@ -507,6 +645,15 @@ end
 
 const ENUM_BATTERIES_ALLOWED_KW = keys(ENUM_BATTERIES_DEFAULTS)
 
+# Same shape as `ENUM_BATTERIES_DEFAULTS`, but with every Bool flipped to
+# `false` and `typesalt` left at `nothing`. Used as the base nametuple for
+# the `@enumbattery` macro. Derived programmatically so it stays in sync
+# if `ENUM_BATTERIES_DEFAULTS` ever gains a new option.
+const ENUM_BATTERIES_NONE = (;
+    (k => (v isa Bool ? false : v) for (k, v) in pairs(ENUM_BATTERIES_DEFAULTS))...
+)
+@assert keys(ENUM_BATTERIES_NONE) == keys(ENUM_BATTERIES_DEFAULTS)
+
 """
 
     @enumbatteries T [options]
@@ -519,14 +666,56 @@ Automatically derive several methods for Enum type `T`.
 @enumbatteries Color
 @enumbatteries Color hash=false # don't overload `Base.hash`
 @enumbatteries Color symbol_conversion=true # allow convert(Color, :Blue), Color(:Blue), convert(Symbol, Blue), Symbol(Blue)
+@enumbatteries Color symbol_conversion      # bare symbol is shorthand for `symbol_conversion=true`
+```
+
+Like [`@batteries`](@ref), arguments may also be `NamedTuple`-valued
+expressions whose fields are spliced in (config-style):
+
+```julia
+const enum_config = (string_conversion=true, symbol_conversion=true)
+@enumbatteries Color enum_config
+@enumbatteries Color enum_config hash=false  # override
 ```
 
 Supported options and defaults are:
 
 $(doc_enum_batteries_options())
+
+See also [`@enumbattery`](@ref) for an opt-in variant that derives only
+the listed batteries instead of starting from the defaults.
 """
 macro enumbatteries(T, kw...)
-    nt = parse_all_macro_kw(kw)
+    def_enumbatteries(__module__, T, kw, ENUM_BATTERIES_DEFAULTS) |> esc
+end
+
+"""
+
+    @enumbattery T [options]
+
+Like [`@enumbatteries`](@ref) but with every default flipped to `false`:
+only the batteries the user lists explicitly are derived. The
+`enum_from_string` / `enum_from_symbol` / `string_from_enum` /
+`symbol_from_enum` methods are always defined (they have no opt-out in
+`@enumbatteries` either).
+
+# Example
+```julia
+@enum Color Red Blue Yellow
+@enumbattery Color symbol_conversion          # only the symbol-conversion batteries
+@enumbattery Color hash typesalt=0xab         # only stable hash
+```
+"""
+macro enumbattery(T, kw...)
+    def_enumbatteries(__module__, T, kw, ENUM_BATTERIES_NONE) |> esc
+end
+
+# Shared codegen for `@enumbatteries` / `@enumbattery`. The two macros
+# differ only in `base`: `ENUM_BATTERIES_DEFAULTS` (most batteries on) vs
+# `ENUM_BATTERIES_NONE` (everything off, except the always-on
+# `enum_from_*` / `*_from_enum` methods).
+function def_enumbatteries(__module__, T, kw, base)
+    nt = parse_all_macro_kw(kw, __module__, propertynames(ENUM_BATTERIES_DEFAULTS))
     for (pname, val) in pairs(nt)
         if !(pname in propertynames(ENUM_BATTERIES_DEFAULTS))
             error("""
@@ -549,7 +738,10 @@ macro enumbatteries(T, kw...)
             """)
         end
     end
-    nt = merge(ENUM_BATTERIES_DEFAULTS, (; hash = haskey(nt, :typesalt)), nt)
+    # `typesalt` only makes sense with `hash=true`. If the user passed
+    # `typesalt` without `hash`, infer `hash=true` so the salt isn't
+    # silently ignored. Explicit `hash=false typesalt=...` still wins.
+    nt = merge(base, (; hash = haskey(nt, :typesalt) || base.hash), nt)
     TT = Base.eval(__module__, T)::Type
     ret = quote end
 
@@ -584,7 +776,7 @@ macro enumbatteries(T, kw...)
         push!(ret.args, def)
     end
     push!(ret.args, def_has_batteries(T))
-    return esc(ret)
+    return ret
 end
 
 end #module

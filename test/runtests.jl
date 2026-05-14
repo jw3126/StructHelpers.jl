@@ -1,4 +1,4 @@
-using StructHelpers: @batteries, StructHelpers, @enumbatteries
+using StructHelpers: @batteries, @battery, StructHelpers, @enumbatteries, @enumbattery
 const SH = StructHelpers
 using Test
 
@@ -94,6 +94,10 @@ function SH.default_keywords(::Type{CountedDefaults})
     (a = 1, b = 2)
 end
 
+# Bare-flag sugar: `flag` ≡ `flag=true`, mixable with `flag=value`.
+struct SBare; a; b; end
+@batteries SBare kwconstructor kwshow hash=false
+
 @testset "@batteries" begin
     @test SBatteries(1,2) == SBatteries(1,2)
     @test SBatteries(1,[]) == SBatteries(1,[])
@@ -141,11 +145,22 @@ end
     if VERSION >= v"1.8"
         @test_throws "Bad keyword argument value:" @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws "Unsupported keyword" @macroexpand @batteries SErrors kwconstructor=true nonsense=true
-        @test_throws "Expected a keyword argument of the form name = value" @macroexpand @batteries SErrors nonsense
+        # Bare symbol naming a known flag is sugar for `=true`. A bare
+        # symbol that is *not* a known flag falls through to the
+        # NamedTuple-config path; if it isn't bound to anything either,
+        # we report "Bad argument" with the failed evaluation.
+        @test_throws "Bad argument" @macroexpand @batteries SErrors nonsense
     else
         @test_throws Exception @macroexpand @batteries  SErrors kwconstructor="true"
         @test_throws Exception @macroexpand @batteries SErrors kwconstructor=true nonsense=true
         @test_throws Exception @macroexpand @batteries SErrors nonsense
+    end
+
+    @testset "bare-flag sugar" begin
+        # Bare flag works as a substitute for `=true` and is freely mixable
+        # with explicit `=` assignments.
+        @test SBare(a=1, b=2) == SBare(1, 2)            # kwconstructor enabled
+        @test sprint(show, SBare(1, 2)) == "SBare(a = 1, b = 2)"  # kwshow enabled
     end
 
 
@@ -233,6 +248,207 @@ end
     @test COUNTED_DEFAULTS_CALLS[] == 1
 end
 
+# `@battery T ...`: opt-in variant where every default is `false`. Only
+# the listed batteries are derived; nothing else.
+struct BatOnlyKwconstructor; a; b; end
+@battery BatOnlyKwconstructor kwconstructor
+
+struct BatOnlyEqIsequal; a; end
+@battery BatOnlyEqIsequal eq isequal
+
+struct BatOnlyHash; a; end
+@battery BatOnlyHash hash typesalt=0xabcdef0123456789
+
+struct BatNothing; a; end
+@battery BatNothing  # legal: derives only `has_batteries`
+
+@testset "@battery" begin
+    # `kwconstructor` enabled, but no `==`, `isequal`, `hash`,
+    # `getproperties`, `constructorof`, `selfconstructor`.
+    @test BatOnlyKwconstructor(a=1, b=2).a == 1
+    # No structural ==: two structurally equal objects compare false (===),
+    # but the default Julia `==` on structs (egal-by-fields for immutables)
+    # may still return true. We assert the *macro* didn't define one by
+    # checking that `Base.:(==)(::T,::T)` is the generic fallback method,
+    # i.e. that no method was added with both args ::BatOnlyKwconstructor.
+    @test !any(methods(==, (BatOnlyKwconstructor, BatOnlyKwconstructor))) do m
+        m.sig === Tuple{typeof(==), BatOnlyKwconstructor, BatOnlyKwconstructor}
+    end
+    # No selfconstructor: outer-of-outer wraps rather than passes through.
+    @test BatOnlyKwconstructor(BatOnlyKwconstructor(1, 2), 3).a isa BatOnlyKwconstructor
+
+    # `eq` and `isequal` enabled; `hash` is NOT — verify by checking that
+    # no specialized `Base.hash(::T, ::UInt)` method exists.
+    @test BatOnlyEqIsequal(1) == BatOnlyEqIsequal(1)
+    @test isequal(BatOnlyEqIsequal(1), BatOnlyEqIsequal(1))
+    @test !any(methods(hash, (BatOnlyEqIsequal, UInt))) do m
+        m.sig === Tuple{typeof(hash), BatOnlyEqIsequal, UInt}
+    end
+
+    # `hash` + `typesalt` works in subset mode without auto-enabling
+    # anything else.
+    h = 0x123456789abcdef0
+    @test hash(BatOnlyHash(7), h) == hash((7,), hash(0xabcdef0123456789, h))
+
+    # `@battery T` with no flags is legal (only `has_batteries` is set).
+    @test StructHelpers.has_batteries(BatNothing)
+
+    # `@battery` rejects unknown keywords just like `@batteries`.
+    if VERSION >= v"1.8"
+        # Bare symbol that is neither a flag nor bound to a NamedTuple
+        # triggers the config-eval path and reports a "Bad argument"
+        # error with the underlying UndefVarError.
+        @test_throws "Bad argument" @macroexpand @battery BatNothing nonsense
+        @test_throws "Bad keyword argument value" @macroexpand @battery BatNothing kwshow="true"
+    end
+end
+
+# `NamedTuple`-config splatting: any macro argument that is neither a
+# flag nor `name=value` is evaluated in the calling module and its
+# `pairs(...)` are spliced in. Later args override earlier ones.
+const config_kwshow_kwconst    = (kwshow=true, kwconstructor=true)
+const config_with_typesalt     = (kwshow=true, kwconstructor=true, typesalt=0x42)
+const config_no_kwconstructor  = (kwconstructor=false,)
+
+# 1. Single config splat into `@batteries`. The defaults still apply for
+#    keys not in the config; the config wins for keys it sets.
+struct CfgA; a; b; end
+@batteries CfgA config_kwshow_kwconst
+
+# 2. Config + per-struct override: explicit `typesalt=...` wins over
+#    whatever the config says (and over the default).
+struct CfgB; a; b; end
+@batteries CfgB config_with_typesalt typesalt=0x99
+
+# 3. Two configs combined; later overrides earlier.
+struct CfgC; a; b; end
+@batteries CfgC config_kwshow_kwconst config_no_kwconstructor
+
+# 4. Inline NamedTuple literal (no const required).
+struct CfgD; a; b; end
+@batteries CfgD (kwshow=true, kwconstructor=true)
+
+# 5. `@battery` (opt-in form) plus a config: only the config's batteries
+#    are derived, nothing else.
+struct CfgE; a; b; end
+@battery CfgE config_kwshow_kwconst
+
+# 6. `@battery` plus a config plus a bare-flag override.
+struct CfgF; a; end
+@battery CfgF config_kwshow_kwconst eq
+
+# 7. Multiple disjoint configs combined with a per-struct override.
+const cfg_part_kwshow         = (kwshow=true,)
+const cfg_part_kwconstructor  = (kwconstructor=true,)
+const cfg_part_typesalt       = (typesalt=0x42,)
+struct CfgG; a; b; end
+@batteries CfgG cfg_part_kwshow cfg_part_kwconstructor cfg_part_typesalt typesalt=0x99
+
+# Forward-compatibility regression test: a bare symbol that names *both*
+# a flag *and* a NamedTuple binding in the calling module must resolve
+# to the binding (so future flag additions cannot silently shadow user
+# configs sharing the new flag's name). `kwconstructor` is an existing
+# flag; the binding below maps it to a NamedTuple that turns on
+# `kwshow` instead — proving the binding won and the flag did not.
+const kwconstructor = (kwshow = true,)
+struct CfgShadow; a; end
+@battery CfgShadow kwconstructor
+struct CfgExplicit; a; end
+@battery CfgExplicit kwconstructor = true
+
+@testset "NamedTuple config splat" begin
+    # The behavior of every individual flag (kwshow, kwconstructor, ==,
+    # isequal, hash, typesalt, ...) is already exercised exhaustively
+    # by the @batteries / @battery testsets above. The job of *this*
+    # testset is to verify that the splatting machinery sets exactly
+    # the flags the user asked for and nothing else, regardless of
+    # whether they came from a const config, an inline NamedTuple
+    # literal, multiple configs, or a config + override.
+    has_method(f, sig) = any(m -> m.sig === Tuple{typeof(f), sig...}, methods(f, sig))
+
+    # 1. `@batteries` + config: config-set flags ON, untouched flags
+    #    keep their (mostly-on) defaults.
+    @test  has_method(==,      (CfgA, CfgA))   # default
+    @test  has_method(isequal, (CfgA, CfgA))   # default
+    @test  has_method(hash,    (CfgA, UInt))   # default
+
+    # 2. Per-struct override wins over the config it follows. typesalt
+    #    is the only flag whose value can be observed without method
+    #    introspection, hence the explicit hash check.
+    h = UInt(0)
+    @test hash(CfgB(7, 8), h) === hash((7, 8), hash(0x99, h))
+    @test hash(CfgB(7, 8), h) !== hash((7, 8), hash(0x42, h))
+
+    # 3. Two-config last-write-wins: the second config's
+    #    `kwconstructor=false` undoes the first config's `=true`.
+    @test_throws MethodError CfgC(a=1, b=2)
+
+    # 4. Inline NamedTuple literal: same effect as a const config.
+    @test has_method(==, (CfgD, CfgD))
+    @test CfgD(a=1, b=2) === CfgD(1, 2)        # kwconstructor reached us
+
+    # 5. `@battery` + config: only the config's flags are set; defaults
+    #    are NOT pulled in (this is what distinguishes the two macros).
+    @test !has_method(==,      (CfgE, CfgE))
+    @test !has_method(isequal, (CfgE, CfgE))
+    @test !has_method(hash,    (CfgE, UInt))
+
+    # 6. `@battery` + config + bare-flag override: bare `eq` adds `==`
+    #    on top of the config; isequal/hash still absent.
+    @test  has_method(==,      (CfgF, CfgF))
+    @test !has_method(isequal, (CfgF, CfgF))
+    @test !has_method(hash,    (CfgF, UInt))
+
+    # 7. Multiple disjoint configs + per-struct override. All three
+    #    config NamedTuples are spliced in; the explicit `typesalt`
+    #    overrides the one set by `cfg_part_typesalt`. Because this is
+    #    `@batteries` (not `@battery`), the defaults still apply for
+    #    keys none of the configs touched.
+    @test CfgG(a=1, b=2) === CfgG(1, 2)
+    @test sprint(show, CfgG(1, 2)) == "CfgG(a = 1, b = 2)"
+    let h = UInt(0)
+        # typesalt from explicit override, not from cfg_part_typesalt.
+        @test hash(CfgG(7, 8), h) === hash((7, 8), hash(0x99, h))
+        @test hash(CfgG(7, 8), h) !== hash((7, 8), hash(0x42, h))
+    end
+    # Defaults untouched by any of the three configs are still on:
+    @test  has_method(==, (CfgG, CfgG))
+    @test  has_method(isequal, (CfgG, CfgG))
+    @test  has_method(hash, (CfgG, UInt))
+    # And the methods actually defined by the configs are there:
+    @test  has_method(show, (IO, CfgG))
+    @test  hasmethod(CfgG, Tuple{}, (:a, :b))
+
+    @testset "errors" begin
+        if VERSION >= v"1.8"
+            # Bare symbol that's neither a flag nor a binding.
+            @test_throws "Bad argument" @macroexpand @batteries CfgA undefined_config
+            # Bound but not a NamedTuple, and not a flag name either.
+            global not_a_namedtuple = 42
+            @test_throws "Bad argument" @macroexpand(@batteries CfgA not_a_namedtuple)
+            # Inline non-NamedTuple expression.
+            @test_throws "Bad argument" @macroexpand @batteries CfgA 1 + 2
+        end
+    end
+
+    @testset "binding wins over flag name" begin
+        # Forward-compatibility guarantee: when a bare symbol names
+        # *both* a flag *and* a NamedTuple binding in the calling
+        # module, the binding wins. This means StructHelpers can add
+        # new flags in the future without silently shadowing a user's
+        # const config that happens to share the new flag's name; the
+        # user only needs to rename the binding (or spell the flag
+        # explicitly as `flag = true`) to opt into the new flag.
+        @test :kwconstructor in StructHelpers.BATTERIES_ALLOWED_KW
+        # The NamedTuple binding was splatted ⇒ kwshow is on.
+        @test sprint(show, CfgShadow(1)) == "CfgShadow(a = 1)"
+        # The flag interpretation was *not* taken ⇒ no kw constructor.
+        @test_throws MethodError CfgShadow(a = 1)
+        # The explicit form still reaches the flag.
+        @test CfgExplicit(a = 1).a == 1
+    end
+end
+
 @enum EnumNoBatteries UsesGas UsesPlug UsesMuscles
 
 @enum Color Red Blue Green
@@ -301,6 +517,33 @@ end
     typesalt = 0xd11b6121f2b8cd22
     @test hash(MinusOne, h) == hash(-1, hash(typesalt, h))
     @test hash(MinusTwo, h) == hash(-2, hash(typesalt, h))
+end
+
+# `@enumbattery T ...`: opt-in variant of `@enumbatteries`.
+@enum ECol1 ECol1A ECol1B
+@enumbattery ECol1 symbol_conversion
+
+@enum ECol2 ECol2A=4 ECol2B=5
+@enumbattery ECol2 hash typesalt=0xfedcba9876543210
+
+@enum ECol3 ECol3A ECol3B
+@enumbattery ECol3  # legal: only the always-on enum_from_*/from_enum methods + has_batteries
+
+@testset "@enumbattery" begin
+    # symbol_conversion enabled, string_conversion not.
+    @test ECol1(:ECol1A) === ECol1A
+    @test Symbol(ECol1A) === :ECol1A
+    @test_throws Exception ECol1("ECol1A")          # string_conversion off
+    # selfconstructor off too: ECol1(::ECol1) is not defined.
+    @test_throws Exception ECol1(ECol1A)
+
+    # hash + typesalt works without auto-enabling anything else.
+    h = 0x55aa55aa55aa55aa
+    @test hash(ECol2A, h) == hash(4, hash(0xfedcba9876543210, h))
+
+    # Empty `@enumbattery` is legal; the always-on methods are there.
+    @test StructHelpers.has_batteries(ECol3)
+    @test StructHelpers.string_from_enum(ECol3A) == "ECol3A"
 end
 
 struct Bad end
