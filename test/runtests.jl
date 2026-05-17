@@ -1,6 +1,7 @@
 using StructHelpers: @batteries, @battery, StructHelpers, @enumbatteries, @enumbattery
 const SH = StructHelpers
 using Test
+using Aqua
 
 struct SVanilla
     a
@@ -714,4 +715,8 @@ module ShadowedCore
         @test convert(Main.Base.String, BLUE) == "BLUE"
         @test Main.Base.Symbol(RED) === :RED
     end
+end
+
+@testset "Aqua" begin
+    Aqua.test_all(StructHelpers)
 end
