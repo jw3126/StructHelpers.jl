@@ -2,6 +2,9 @@ using StructHelpers: @batteries, @battery, StructHelpers, @enumbatteries, @enumb
 const SH = StructHelpers
 using Test
 using Aqua
+using StaticArrays
+
+include("showrepr.jl")
 
 struct SVanilla
     a
@@ -134,7 +137,7 @@ struct SBare; a; b; end
     @test_throws MethodError SBatteries(a=1, b=2)
 
     s = sprint(show, Skw(a=1, b=2))
-    @test occursin("=", s)
+    @test s == "Skw(a = 1, b = 2)"
 
     s = sprint(show, SBatteries(1,2))
     @test !occursin("=", s)

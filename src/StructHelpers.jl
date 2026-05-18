@@ -7,6 +7,8 @@ export @enumbattery
 
 import ConstructionBase: getproperties, constructorof, setproperties
 
+include("showrepr.jl")
+
 # `$SH.foo` in macro emissions interpolates the StructHelpers module value
 # directly into the generated AST. This resolves via `getproperty` at the
 # call site without requiring `import StructHelpers` (or any caller-side
@@ -112,6 +114,16 @@ end
     nt = Tuple(getproperties(o))
     Base.hash(nt, h)
 end
+"""
+    kwshow(io::IO, o)
+
+Show `o` as `T(f1 = v1, f2 = v2, ...)`, listing every field as a keyword
+argument. The output is recreatable via the keyword constructor (see
+[`@batteries`](@ref) with `kwconstructor=true`).
+
+For a representation that picks the shortest constructor call and omits
+default values, see [`showrepr`](@ref).
+"""
 function kwshow(io::IO, o)
     print(io, typeof(o))
     print(io, "(")
@@ -173,6 +185,7 @@ const BATTERIES_DEFAULTS = (
     kwconstructor = false,
     selfconstructor = true,
     kwshow        = false,
+    showrepr      = false,
     getproperties = true ,
     constructorof = true ,
     typesalt      = nothing,
@@ -186,6 +199,7 @@ const BATTERIES_DOCSTRINGS = (
     kwconstructor = "Add a keyword constructor. Defaults can be supplied by overloading [`default_keywords`](@ref).",
     selfconstructor = "Add a constructor of the for `T(self::T) = self`",
     kwshow        = "Overload `Base.show` such that the names of each field are printed. Fields whose value is `isequal` to the value returned by [`default_keywords`](@ref) are omitted.",
+    showrepr      = "Overload `Base.show` to print a heuristically short constructor call that recreates the object, omitting default values. Mutually exclusive with `kwshow`.",
     getproperties = "Overload `ConstructionBase.getproperties`.",
     constructorof = "Overload `ConstructionBase.constructorof`.",
     typesalt      = "Only used if `hash=true`. In this case the `hash` will be purely computed from `typesalt` and `hash_eq_as(obj)`. The type `T` will not be used otherwise. This makes the hash more likely to stay constant, when executing on a different machine or julia version",
@@ -378,8 +392,15 @@ function def_batteries(__module__, T, kw, base)
         )
         push!(ret.args, def)
     end
+    if nt.kwshow && nt.showrepr
+        error("`kwshow` and `showrepr` are mutually exclusive; please pick at most one.")
+    end
     if nt.kwshow
         def = :($(Base).show(io::$IO, o::$T) = $(kwshow)(io, o))
+        push!(ret.args, def)
+    end
+    if nt.showrepr
+        def = :(Base.show(io::IO, o::$T) = $(showrepr)(io, o))
         push!(ret.args, def)
     end
     if nt.getproperties
