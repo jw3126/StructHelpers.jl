@@ -23,6 +23,18 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      - name: Drop JET deps on Julia versions JET does not support
+        # JET requires 1.7 <= Julia <= 1.12, so Pkg cannot resolve
+        # JET on Julia 1.6 or on nightly. Strip JET from Project.toml
+        # (compat + extras + targets) and from runtests.jl on those
+        # rows so the rest of the test suite still runs green.
+        # The job using a registered JET-supported Julia version ('1')
+        # keeps full JET coverage.
+        if: matrix.version == 'nightly' || matrix.version == '1.6'
+        run: |
+          sed -i '/^JET = /d' Project.toml
+          sed -i 's/, "JET"//' Project.toml
+          sed -i '/^@testset "JET" begin$/,/^end$/d' test/runtests.jl
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

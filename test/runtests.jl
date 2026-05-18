@@ -720,3 +720,9 @@ end
 @testset "Aqua" begin
     Aqua.test_all(StructHelpers)
 end
+
+@testset "JET" begin
+    using JET
+    result = JET.report_package(StructHelpers)
+    @test isempty(JET.get_reports(result))
+end

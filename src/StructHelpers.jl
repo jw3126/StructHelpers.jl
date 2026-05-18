@@ -350,9 +350,7 @@ function def_batteries(__module__, T, kw, base)
     ret = quote end
 
     need_fieldnames = nt.kwconstructor || nt.getproperties
-    if need_fieldnames
-        fieldnames = Base.fieldnames(Base.eval(__module__, T))
-    end
+    fieldnames = need_fieldnames ? Base.fieldnames(Base.eval(__module__, T)) : ()
     need_StructTypes = nt.StructTypes
     if need_StructTypes
         push!(ret.args, :(import StructTypes as $ST))
