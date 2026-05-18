@@ -137,7 +137,7 @@ function constructor_repr(o)
         end
         for k in keep_kws
             sep && print(buf, ", "); sep = true
-            print(buf, k, " = ")
+            print(buf, k, "=")
             s = compactify!(kw_vals, k, trycall)
             s === nothing ? show(buf, kw_vals[k]) : print(buf, s)
         end
