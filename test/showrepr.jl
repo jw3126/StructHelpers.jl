@@ -53,9 +53,9 @@ SHybrid(a, b; c=3) = SHybrid(a, b, c)
     # All defaults: empty constructor wins.
     @test sprint(show, SDefaults()) == "SDefaults()"
     # One non-default: only that field is shown.
-    @test sprint(show, SDefaults(b=10)) == "SDefaults(b = 10)"
+    @test sprint(show, SDefaults(b=10)) == "SDefaults(b=10)"
     # Last non-default with defaults preceding it.
-    @test sprint(show, SDefaults(c=30)) == "SDefaults(c = 30)"
+    @test sprint(show, SDefaults(c=30)) == "SDefaults(c=30)"
     # Multiple non-defaults: round-trip plus a sanity length bound. We do
     # not pin the exact rendering — the algorithm may pick the kwarg or
     # positional form depending on tie-breaking — but it must be no
@@ -73,6 +73,13 @@ SHybrid(a, b; c=3) = SHybrid(a, b, c)
     s = sprint(show, SDefaultsKw(b=10))
     @test SDefaultsKw(b=10) == eval(Meta.parse(s))
     @test length(s) <= length("SDefaultsKw(1, 10)")
+    # Single non-default with one leading default: the kwarg form
+    # `SDefaultsKw(b=10)` (17 chars) beats the all-positional
+    # `SDefaultsKw(1, 10)` (18 chars). This is the case from
+    # https://github.com/jw3126/StructHelpers.jl/issues/12#issuecomment-…
+    # where omitting spaces around `=` makes the keyword form win.
+    @test sprint(show, SDefaultsKw(b=10)) == "SDefaultsKw(b=10)"
+    @test sprint(show, SDefaultsKw(a=3)) == "SDefaultsKw(a=3)"
 
     # When extra positional constructors exist, the shortest one wins
     # over the keyword form.
@@ -84,7 +91,7 @@ SHybrid(a, b; c=3) = SHybrid(a, b, c)
     # `missing` matches the default (via `isequal`), while non-`missing`
     # values do not.
     @test sprint(show, SMissingDefault()) == "SMissingDefault()"
-    @test sprint(show, SMissingDefault(a=missing, b=2)) == "SMissingDefault(b = 2)"
+    @test sprint(show, SMissingDefault(a=missing, b=2)) == "SMissingDefault(b=2)"
     s = sprint(show, SMissingDefault(a=42, b=1))
     @test SMissingDefault(a=42, b=1) == eval(Meta.parse(s)) ||
           isequal(SMissingDefault(a=42, b=1), eval(Meta.parse(s)))
@@ -271,7 +278,7 @@ end
     @test sprint(show, SVecFieldKwDefaults()) == "SVecFieldKwDefaults()"
     # Overriding `a` with another long uniform vector still uses `fill`.
     @test sprint(show, SVecFieldKwDefaults(a=[9,9,9,9,9,9])) ==
-          "SVecFieldKwDefaults(a = fill(9, 6))"
+          "SVecFieldKwDefaults(a=fill(9, 6))"
 
     # Strictly-typed field (NTuple) won't accept a `Vector` substitute,
     # so the default rendering is preserved.
@@ -397,7 +404,7 @@ end
 
 @testset "showrepr handles mutable structs without ==" begin
     @test sprint(show, SMutNoEq())             == "SMutNoEq()"
-    @test sprint(show, SMutNoEq(b = 7))        == "SMutNoEq(0, 7)"
+    @test sprint(show, SMutNoEq(b = 7))        == "SMutNoEq(b=7)"
     @test sprint(show, SMutNoEq(a = 1, b = 2)) == "SMutNoEq(1, 2)"
 end
 
